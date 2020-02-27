@@ -1,0 +1,47 @@
+
+
+umbral.p.valor: 0.05
+n.realizaciones: 1
+valor.minimo.deteccion.x: 1
+valor.minimo.deteccion.y: 0.1
+
+
+configuracion.ajuste.copula:
+  - [ familia,   funcion_ajuste,   uso_sequias ]
+  - [ "gumbel",  "AjustarCopulaGumbel",   TRUE ]      
+  - [ "frank",   "AjustarCopulaFrank",    TRUE ]       
+  - [ "joe",     "AjustarCopulaJoe",      TRUE ]       
+  - [ "clayton", "AjustarCopulaClayton",  TRUE ]      
+  - [ "normal",  "AjustarCopulaNormal",   TRUE ]       
+  - [ "t",       "AjustarCopulatstudent", TRUE ]
+
+
+configuracion.ajuste.univariado:
+  - [ ditribucion, funcion_ajuste_lmomentos,                    funcion_ajuste_maxima_verosimilitud,                 uso_sequias ]
+  - [ "aep4", "AjustarLMomentosAsymetricExponentialPower",      "AjustarMaximaVerosimilitudAsymetricExponentialPower",     FALSE ]
+  - [ "cau",  "AjustarLMomentosCauchy",                         "AjustarMaximaVerosimilitudCauchy",                        FALSE ]
+  - [ "exl",  "AjustarLMomentosExponencial",                    "AjustarMaximaVerosimilitudExponencial",                   TRUE  ]
+  - [ "gam",	"AjustarLMomentosGamma",	                        "AjustarMaximaVerosimilitudGamma",	                       TRUE  ]
+  - [	"gep",	"AjustarLMomentosGeneralizedExponentialPoisson",	"AjustarMaximaVerosimilitudGeneralizedExponentialPoisson", FALSE ]
+  - [	"gev",	"AjustarLMomentosGeneralizedExtremeValue",	      "AjustarMaximaVerosimilitudGeneralizedExtremeValue",       TRUE  ]
+  - [	"gld",	"AjustarLMomentosGeneralizedLambda",	            "AjustarMaximaVerosimilitudGeneralizedLambda",             FALSE ]
+  - [	"glo",	"AjustarLMomentosGeneralizedLogistic",	          "AjustarMaximaVerosimilitudGeneralizedLogistic",           TRUE  ]
+  - [	"gno",	"AjustarLMomentosGeneralizedNormal",	            "AjustarMaximaVerosimilitudGeneralizedNormal",             TRUE  ]
+  - [	"gov",	"AjustarLMomentosGovindarajulu",	                "AjustarMaximaVerosimilitudGovindarajulu",                 FALSE ]
+  - [	"gpa",	"AjustarLMomentosGeneralizedPareto",	            "AjustarMaximaVerosimilitudGeneralizedPareto",             TRUE  ]
+  - [	"gum",	"AjustarLMomentosGumbel",	                        "AjustarMaximaVerosimilitudGumbel",                        TRUE  ]
+  - [	"kap",	"AjustarLMomentosKappa",                          "AjustarMaximaVerosimilitudKappa",                         FALSE ]
+  - [	"kur",	"AjustarLMomentosKumaraswamy",                    "AjustarMaximaVerosimilitudKumaraswamy",                   FALSE ]
+  - [	"lap",	"AjustarLMomentosLaplace",                        "AjustarMaximaVerosimilitudLaplace",                       TRUE  ]
+  - [	"lmrq",	"AjustarLMomentosLinearMeanResidualQuantile",     "AjustarMaximaVerosimilitudLinearMeanResidualQuantile",    FALSE ]
+  - [	"ln3",	"AjustarLMomentosLogNormal",                      "AjustarMaximaVerosimilitudLogNormal",                     TRUE  ]
+  - [	"nor",	"AjustarLMomentosNormal",                         "AjustarMaximaVerosimilitudNormal",                        TRUE  ]
+  - [	"pe3",	"AjustarLMomentosPearsonIII",                     "AjustarMaximaVerosimilitudPearsonIII",                    TRUE  ]
+  - [	"ray",	"AjustarLMomentosRayleigh",                       "AjustarMaximaVerosimilitudRayleigh",                      FALSE ]
+  - [	"rice",	"AjustarLMomentosRice",                           "AjustarMaximaVerosimilitudRice",                          FALSE ]
+  - [	"sla",	"AjustarLMomentosSlash",                          "AjustarMaximaVerosimilitudSlash",                         FALSE ]
+  - [	"st3",	"AjustarLMomentosStudent_t3",                     "AjustarMaximaVerosimilitudStudent_t3",                    TRUE  ]
+  - [	"tri",	"AjustarLMomentosAsymmetricTriangular",           "AjustarMaximaVerosimilitudAsymmetricTriangular",          FALSE ]
+  - [	"wak",	"AjustarLMomentosWakeby",                         "AjustarMaximaVerosimilitudWakeby",                        FALSE ]
+  - [	"wei",	"AjustarLMomentosWeibull",                        "AjustarMaximaVerosimilitudWeibull",                       TRUE  ]
+

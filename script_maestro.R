@@ -3,6 +3,22 @@
 rm(list = objects())
 # -----------------------------------------------------------------------------
 
+
+config <- yaml::read_yaml("parametros.yml")
+
+configuracion.ajuste.univariado.completo <- purrr::pmap_dfr(
+  .l = utils::tail(config$configuracion.ajuste.univariado, -1) %>% purrr::transpose(), 
+  .f = function(..., nombres_columnas) { tibble::tibble(...) %>% setNames(nombres_columnas) },
+  nombres_columnas = config$configuracion.ajuste.univariado[[1]]
+)
+
+configuracion.ajuste.copula.completo <- purrr::pmap_dfr(
+  .l = utils::tail(config$configuracion.ajuste.copula, -1) %>% purrr::transpose(), 
+  .f = function(..., nombres_columnas) { tibble::tibble(...) %>% setNames(nombres_columnas) },
+  nombres_columnas = config$configuracion.ajuste.copula[[1]]
+)
+
+
 # -----------------------------------------------------------------------------#
 # Paso 2: Cargar paquetes necesarios ----
 require(dplyr)
@@ -37,12 +53,14 @@ source('funciones_auxiliares.R')
 
 # Ajuste univariado 
 # Leer archivo de configuracion de funciones de ajuste univariado
-configuracion.ajuste.univariado <- readxl::read_excel(path = "funciones_ajuste.xls") %>%
+configuracion.ajuste.univariado <- #readxl::read_excel(path = "funciones_ajuste.xls") %>%
+  configuracion.ajuste.univariado.completo %>%
   dplyr::filter(uso_sequias) %>%
   dplyr::select(distribucion, funcion_ajuste_lmomentos, funcion_ajuste_maxima_verosimilitud)
 
 # Leer archivo de configuracion de funciones de ajuste multivariado
-configuracion.ajuste.copula <- readxl::read_excel(path = "funciones_ajuste_copulas.xls") %>%
+configuracion.ajuste.copula <- #readxl::read_excel(path = "funciones_ajuste_copulas.xls") %>%
+  configuracion.ajuste.copula.completo %>%
   dplyr::filter(uso_sequias) %>%
   dplyr::select(familia, funcion_ajuste)
 
@@ -58,6 +76,10 @@ valor.minimo.deteccion.y <- 0.1
 # -----------------------------------------------------------------------------#
 # Paso 5: Conectar base de datos ----
 
+# eventos.completos
+read("eventos.completos.rda")
+eventos <- feather::read_feather("../IndicesGenerador/data/output/resultados_identificar_eventos.feather")
+
 # estacion.usar <- '87750'
 estaciones <- c('87791')
 escala <- 3L
@@ -70,7 +92,7 @@ eventos.estacion <- eventos.completos %>%
   dplyr::filter(., estacion_id == estacion.usar & tipo_evento == 'seco')
 
 x <- eventos.estacion$duracion
-y <- eventos.estacion$minimo*-1
+y <- eventos.estacion$minimo*-1 # solo para los valores negativos, o sea, deber铆a usar valor absoluto, SI ALG脷N VALOR MENOR A cero PARAR
 fechas <- eventos.estacion$fecha_inicio
 # ------------------------------------------------------------------------------
 
@@ -140,7 +162,7 @@ GraficarKPlot(x = x, y = y)
 # ------------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------#
-# Paso 8. Aleatorizaci髇 de las variables y ajuste de copulas ----
+# Paso 8. Aleatorizaci贸n de las variables y ajuste de copulas ----
 
 # Paso 8.a.: Aleatorizacion y ajuste ----
 # Inicializar objeto para guardar resultados
@@ -160,7 +182,7 @@ configuracion.ajuste.univariado.y <- configuracion.ajuste.univariado %>%
   dplyr::select(., distribucion, matches(mejor.ajuste.y$metodo_ajuste))
 
 
-# Ajuste univariado y evaluaci髇 de estacionaridad e independencia
+# Ajuste univariado y evaluaci贸n de estacionaridad e independencia
 for ( i in 1:n.realizaciones) {
   lista.ajuste.copulas$realizacion[[i]] <- i
   # Crear variable con ruido
@@ -203,15 +225,16 @@ for ( i in 1:n.realizaciones) {
   lista.ajuste.copulas$variables.sinteticas$y[[i]] <- y.prima
   lista.ajuste.copulas$ajustes.univariados$y[[i]] <- ajuste
   
+  
   # Evaluar dependencia de las variables sinteticas
-  #resultados.dependencia <- SonDependientes(x.prima, y.prima)
+  #resultados.dependencia <- SonDependientes(x.prima, y.prima) <== # si es true se sigue, sino se para
   resultados.dependencia <- TRUE
   
   lista.ajuste.copulas$son.dependientes[i] <- resultados.dependencia
   
   # Evaluar estacionaridad de las variables sinteticas
-  #resultados.estacionairdad.x <- EsEstacionaria(x = x.prima, fecha = fechas)
-  #resultados.estacionairdad.y <- EsEstacionaria(x = y.prima, fecha = fechas)
+  #resultados.estacionairdad.x <- EsEstacionaria(x = x.prima, fecha = fechas) <== # si es true se sigue, sino se para
+  #resultados.estacionairdad.y <- EsEstacionaria(x = y.prima, fecha = fechas) <== # si es true se sigue, sino se para
   resultados.estacionairdad.x <- TRUE
   resultados.estacionairdad.y <- TRUE
   
@@ -264,7 +287,7 @@ for ( i in 1:n.realizaciones) {
     lista.ajuste.copulas$ajustes.copulas[[i]] <- NA
   }
   
-  print(paste0("Acaba de terminar la realizaci髇 ", i, 'de la estacion ', estacion.usar))
+  print(paste0("Acaba de terminar la realizaci贸n ", i, 'de la estacion ', estacion.usar))
 }
 
 save(lista.ajuste.copulas, file = paste0('lista.ajuste.copulas', '_estacion_', estacion.usar, '_', escala,'.', variables, '.rda'))
@@ -318,9 +341,9 @@ metricas.ajuste.copulas.df <- purrr::pmap_dfr(
   }
 )
 
-# Crear grafico diagn髎tico de metricas
+# Crear grafico diagn贸stico de metricas
 
-# Preparaci髇 del data frame
+# Preparaci贸n del data frame
 metricas.ajuste.copulas.df <- metricas.ajuste.copulas.df %>%
   dplyr::mutate(., familia = factor(metricas.ajuste.copulas.df$familia, 
     levels = c('clayton', 'frank', 'gumbel', 'joe', 'normal', 't'),
@@ -403,7 +426,7 @@ for (i in 1:length(configuracion.ajuste.copula$familia)) {
 # Extraer todas las realizaciones de la mejor familia
 realizaciones.mejor.familia <- lista.ajuste.copulas$ajustes.copulas %>% rlist::list.map(.[[familia]])
 
-# Distribuci髇 del p-valor de la mejor familia
+# Distribuci贸n del p-valor de la mejor familia
 aleatorizacion.p.valor <- purrr::map_dfr(
   .x = seq_len(length(realizaciones.mejor.familia)),
   .f = function(seq_index) {
@@ -447,7 +470,7 @@ sigma.anotacion <- paste("sigma ==", sigma.tau)
 p.tau <- round(resultados.test$p.value, 3)
 p.anotacion <- paste("p-valor ==", p.tau)
 
-# Grafico diagn髎tico
+# Grafico diagn贸stico
 ggplot2::ggplot(aleatorizacion.tau, aes(x = tau.kendall)) +
   stat_ecdf(geom = "point") +
   stat_function(fun = pnor, args = ajuste.normal.tau$parametros) +
@@ -492,19 +515,19 @@ parametros.univariados.x <- purrr::map_dfr(
 ) 
 
 
-# Graficar la distribuci髇 de cada parametro de la disttribuci髇 unnivariada de x
+# Graficar la distribuci贸n de cada parametro de la disttribuci贸n unnivariada de x
 parametros = names(parametros.univariados.x) 
 
 for (i in 1:length(parametros)) {
   
-  # Ajustar distribuci髇 del param閠ro a una normal
+  # Ajustar distribuci贸n del par谩metro a una normal
   ajuste.normal.parametro <- AjustarMaximaVerosimilitudNormal(x = parametros.univariados.x[,i], 
     min.cantidad.valores = 10)
   
   # Evaluar bondad del ajuste a la normal
   resultados.test <- TestKS(parametros.univariados.x[,i], ajuste.normal.parametro)
   
-  # Extraer resultados para la anotaci髇 del grafico
+  # Extraer resultados para la anotaci贸n del grafico
   media.parametro <- round(ajuste.normal.parametro$parametros$mu, 3)
   media.anotacion <- paste("mu ==", media.parametro)
   
@@ -541,19 +564,19 @@ parametros.univariados.y <- purrr::map_dfr(
   }
 ) 
 
-# Graficar la distribuci髇 de cada parametro de la disttribuci髇 unnivariada de y
+# Graficar la distribuci贸n de cada parametro de la disttribuci贸n unnivariada de y
 parametros = names(parametros.univariados.y) 
 
 for (i in 1:length(parametros)) {
   
-  # Ajustar distribuci髇 del param閠ro a una normal
+  # Ajustar distribuci贸n del par谩metro a una normal
   ajuste.normal.parametro <- AjustarMaximaVerosimilitudNormal(x = parametros.univariados.y[,i], 
     min.cantidad.valores = 10)
   
   # Evaluar bondad del ajuste a la normal
   resultados.test <- TestKS(parametros.univariados.y[,i], ajuste.normal.parametro)
   
-  # Extraer resultados para la anotaci髇 del grafico
+  # Extraer resultados para la anotaci贸n del grafico
   media.parametro <- round(ajuste.normal.parametro$parametros$mu, 3)
   media.anotacion <- paste("mu ==", media.parametro)
   
@@ -613,14 +636,14 @@ val <- cbind(grid, z = C.n(grid, X = matrix(cbind(variable.x, variable.y), ncol 
 copula.teorica <- as.data.frame(grid) %>%
   dplyr::mutate(., z = pCopula(grid, copula = mejor.copula))
 
-# Graficar comparacion de la copula empirica y te髍ica
+# Graficar comparacion de la copula empirica y te贸rica
 ggplot(data = as.data.frame(copula.teorica), aes(x = u1, y = u2, z = z, color = 'black')) +
   stat_contour() +
   geom_dl(aes(label=..level..), method="bottom.pieces", stat="contour") +
   geom_contour(data = as.data.frame(val), aes(x = u1, y = u2, z = z,  color = 'red')) +
   theme_bw() +
   scale_colour_manual(guide = 'legend', values = c('black' = 'black', 'red' = 'red'), 
-    labels = c('C髉ula te髍ica', 'C髉ula emp韗ica')) +
+    labels = c('C贸pula te贸rica', 'C贸pula emp铆rica')) +
   theme(legend.position = 'bottom', legend.title = element_blank(), legend.text = element_text(size = 15)) +
   xlab('x') + ylab('y') 
   ggsave(paste0('Copula.teorica.empirica.estacion.', estacion.usar, '.escala.', escala, '.png'),
