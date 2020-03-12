@@ -107,8 +107,9 @@ fechas <- eventos.estacion$fecha_inicio
 parametros.lmomentos            <- list(x = x, min.cantidad.valores = 50)
 parametros.maxima.verosimilitud <- list(x = x, min.cantidad.valores = 50, numero.muestras = NULL)
 
-ajuste.univariado.x <- AjusteUnivariado(x = x, p.valor = umbral.p.valor, 
-                                        configuracion = configuracion.ajuste.univariado)
+ajuste.univariado.x <- AjusteUnivariado(x = x[1:100], p.valor = umbral.p.valor, 
+                                        configuracion = configuracion.ajuste.univariado[7,],
+                                        parametros.lmomentos, parametros.maxima.verosimilitud)
 
 
 
@@ -116,8 +117,9 @@ ajuste.univariado.x <- AjusteUnivariado(x = x, p.valor = umbral.p.valor,
 parametros.lmomentos            <- list(x = y, min.cantidad.valores = 50)
 parametros.maxima.verosimilitud <- list(x = y, min.cantidad.valores = 50, numero.muestras = NULL)
 
-ajuste.univariado.y <- AjusteUnivariado(x = y, p.valor = umbral.p.valor, 
-                                        configuracion = configuracion.ajuste.univariado)
+ajuste.univariado.y <- AjusteUnivariado(x = y[1:100], p.valor = umbral.p.valor, 
+                                        configuracion = configuracion.ajuste.univariado[7,],
+                                        parametros.lmomentos, parametros.maxima.verosimilitud)
 
 # ------------------------------------------------------------------------------
 

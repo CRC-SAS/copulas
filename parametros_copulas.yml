@@ -1,6 +1,24 @@
 
 
 # ------------------------------------------------------------------------------
+# Definicion de ubicaciones de prueba para diagnosticos
+# ------------------------------------------------------------------------------
+ubicaciones:
+  - { uid: "87548", nombre: "Junin" }
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Definicion de ubicaciones de prueba para diagnosticos
+# ------------------------------------------------------------------------------
+variables:
+  - { variable_x: "duracion", variable_y: "minimo" }
+  - { variable_x: "duracion", variable_y: "intensidad" }
+  - { variable_x: "magnitud", variable_y: "intensidad" }
+  - { variable_x: "minimo",   variable_y: "magnitud" }
+# ------------------------------------------------------------------------------
+
+
+# ------------------------------------------------------------------------------
 # Umbral de p-valor para dictaminar que el test de normalidad falla
 # ------------------------------------------------------------------------------
 umbral.p.valor: 0.05
