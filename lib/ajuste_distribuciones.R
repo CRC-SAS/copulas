@@ -24,7 +24,7 @@ AjusteUnivariado <- function(x = x, p.valor = umbral.p.valor, configuracion = co
       bondad.ajuste.maxima.verosimilitud <- NULL
       tryCatch({
         ajuste.maxima.verosimilitud <- do.call(what = funcion_ajuste_maxima_verosimilitud, 
-          args = parametros.maxima.varosimilitud)
+          args = parametros.maxima.verosimilitud)
         bondad.ajuste.maxima.verosimilitud <- TestearBondadAjuste(x = x, 
           umbral.p.valor = umbral.p.valor, 
           ajuste = ajuste.maxima.verosimilitud)  

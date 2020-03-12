@@ -3,22 +3,6 @@
 rm(list = objects())
 # -----------------------------------------------------------------------------
 
-
-config <- yaml::read_yaml("parametros.yml")
-
-configuracion.ajuste.univariado.completo <- purrr::pmap_dfr(
-  .l = utils::tail(config$configuracion.ajuste.univariado, -1) %>% purrr::transpose(), 
-  .f = function(..., nombres_columnas) { tibble::tibble(...) %>% setNames(nombres_columnas) },
-  nombres_columnas = config$configuracion.ajuste.univariado[[1]]
-)
-
-configuracion.ajuste.copula.completo <- purrr::pmap_dfr(
-  .l = utils::tail(config$configuracion.ajuste.copula, -1) %>% purrr::transpose(), 
-  .f = function(..., nombres_columnas) { tibble::tibble(...) %>% setNames(nombres_columnas) },
-  nombres_columnas = config$configuracion.ajuste.copula[[1]]
-)
-
-
 # -----------------------------------------------------------------------------#
 # Paso 2: Cargar paquetes necesarios ----
 require(dplyr)
@@ -35,39 +19,56 @@ require(ggplot2)
 
 # -----------------------------------------------------------------------------#
 # Paso 3: Cargar funciones necesarias ----
-source('funciones_ajustes_marginales.R')
-source('funciones_ajuste_distribuciones.R')
-source('funciones_bondad_ajuste.R')
-source('ajuste_distribuciones.R')
-source('funciones_mejor_ajuste_univariado.R')
-source('funciones_test_estacionaridad.R')
-source('funciones_test_independencia.R')
-source('funciones_ajuste_familias_copulas.R')
-source('funciones_bondad_ajuste_copulas.R')
-source('funciones_mejor_ajuste_copula.R')
-source('funciones_auxiliares.R')
+source('lib/funciones_ajustes_marginales.R')
+source('lib/funciones_ajuste_distribuciones.R')
+source('lib/funciones_bondad_ajuste.R')
+source('lib/ajuste_distribuciones.R')
+source('lib/funciones_mejor_ajuste_univariado.R')
+source('lib/funciones_test_estacionaridad.R')
+source('lib/funciones_test_independencia.R')
+source('lib/funciones_ajuste_familias_copulas.R')
+source('lib/funciones_bondad_ajuste_copulas.R')
+source('lib/funciones_mejor_ajuste_copula.R')
+source('lib/funciones_auxiliares.R')
 # ------------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------#
 # Paso 4: Leer archivo de configuracion ----
 
+config <- list()
+config$params <- yaml::read_yaml("parametros_copulas.yml")
+
 # Ajuste univariado 
 # Leer archivo de configuracion de funciones de ajuste univariado
+configuracion.ajuste.univariado.completo <- purrr::pmap_dfr(
+  .l = utils::tail(config$params$configuracion.ajuste.univariado, -1) %>% purrr::transpose(), 
+  .f = function(..., nombres_columnas) { tibble::tibble(...) %>% setNames(nombres_columnas) },
+  nombres_columnas = config$params$configuracion.ajuste.univariado[[1]]
+)
 configuracion.ajuste.univariado <- #readxl::read_excel(path = "funciones_ajuste.xls") %>%
   configuracion.ajuste.univariado.completo %>%
   dplyr::filter(uso_sequias) %>%
   dplyr::select(distribucion, funcion_ajuste_lmomentos, funcion_ajuste_maxima_verosimilitud)
 
+# Ajuste multivariado 
 # Leer archivo de configuracion de funciones de ajuste multivariado
+configuracion.ajuste.copula.completo <- purrr::pmap_dfr(
+  .l = utils::tail(config$params$configuracion.ajuste.copula, -1) %>% purrr::transpose(), 
+  .f = function(..., nombres_columnas) { tibble::tibble(...) %>% setNames(nombres_columnas) },
+  nombres_columnas = config$params$configuracion.ajuste.copula[[1]]
+)
 configuracion.ajuste.copula <- #readxl::read_excel(path = "funciones_ajuste_copulas.xls") %>%
   configuracion.ajuste.copula.completo %>%
   dplyr::filter(uso_sequias) %>%
   dplyr::select(familia, funcion_ajuste)
 
-umbral.p.valor  <- 0.05
-n.realizaciones <- 1L
-valor.minimo.deteccion.x <- 1
-valor.minimo.deteccion.y <- 0.1
+
+# Otros parámetros
+umbral.p.valor  <- config$params$umbral.p.valor
+n.realizaciones <- config$params$n.series.perturbadas
+valor.minimo.deteccion.x <- config$params$valor.minimo.deteccion.x
+valor.minimo.deteccion.y <- config$params$valor.minimo.deteccion.y
+
 # ------------------------------------------------------------------------------
 
 
@@ -77,11 +78,12 @@ valor.minimo.deteccion.y <- 0.1
 # Paso 5: Conectar base de datos ----
 
 # eventos.completos
-read("eventos.completos.rda")
-eventos <- feather::read_feather("../IndicesGenerador/data/output/resultados_identificar_eventos.feather")
+ev_file <- "/home/dbonhaure/RStudioProjects/copulas/data/input/eventos_identificados.feather"
+eventos.completos <- feather::read_feather(ev_file)  # read("eventos.completos.rda")
+eventos.completos <- eventos.completos %>% dplyr::rename(estacion_id = station_id)
 
 # estacion.usar <- '87750'
-estaciones <- c('87791')
+estaciones <- c('87548')
 escala <- 3L
 variables <- c('duracion-minimo')
 
@@ -103,17 +105,19 @@ fechas <- eventos.estacion$fecha_inicio
 
 # Ajuste de la variable x
 parametros.lmomentos            <- list(x = x, min.cantidad.valores = 50)
-parametros.maxima.varosimilitud <- list(x = x, min.cantidad.valores = 50, numero.muestras = NULL)
+parametros.maxima.verosimilitud <- list(x = x, min.cantidad.valores = 50, numero.muestras = NULL)
 
-ajuste.univariado.x <- AjusteUnivariado(x = x, p.valor = umbral.p.valor)
+ajuste.univariado.x <- AjusteUnivariado(x = x, p.valor = umbral.p.valor, 
+                                        configuracion = configuracion.ajuste.univariado)
 
 
 
 # Ajuste de la variable y
 parametros.lmomentos            <- list(x = y, min.cantidad.valores = 50)
-parametros.maxima.varosimilitud <- list(x = y, min.cantidad.valores = 50, numero.muestras = NULL)
+parametros.maxima.verosimilitud <- list(x = y, min.cantidad.valores = 50, numero.muestras = NULL)
 
-ajuste.univariado.y <- AjusteUnivariado(x = y, p.valor = umbral.p.valor)
+ajuste.univariado.y <- AjusteUnivariado(x = y, p.valor = umbral.p.valor, 
+                                        configuracion = configuracion.ajuste.univariado)
 
 # ------------------------------------------------------------------------------
 
@@ -165,7 +169,7 @@ GraficarKPlot(x = x, y = y)
 # Paso 8. Aleatorización de las variables y ajuste de copulas ----
 
 # Paso 8.a.: Aleatorizacion y ajuste ----
-# Inicializar objeto para guardar resultados
+# Inicializar objeto para guardar resultados ESTO ES LO QUE S EUSA EN LA SIG ETAPA
 lista.ajuste.copulas <- list(realizacion = NA,
   variables.sinteticas = list(x = list(), y = list()),
   ajustes.univariados = list(x = list(), y = list()),
@@ -183,7 +187,7 @@ configuracion.ajuste.univariado.y <- configuracion.ajuste.univariado %>%
 
 
 # Ajuste univariado y evaluación de estacionaridad e independencia
-for ( i in 1:n.realizaciones) {
+for ( i in 1:n.realizaciones) { # n.realiazaciones = n.series.perturbadas
   lista.ajuste.copulas$realizacion[[i]] <- i
   # Crear variable con ruido
   x.prima <- AgregarRuido(x, valor.minimo.deteccion.x)
@@ -233,10 +237,10 @@ for ( i in 1:n.realizaciones) {
   lista.ajuste.copulas$son.dependientes[i] <- resultados.dependencia
   
   # Evaluar estacionaridad de las variables sinteticas
-  #resultados.estacionairdad.x <- EsEstacionaria(x = x.prima, fecha = fechas) <== # si es true se sigue, sino se para
-  #resultados.estacionairdad.y <- EsEstacionaria(x = y.prima, fecha = fechas) <== # si es true se sigue, sino se para
-  resultados.estacionairdad.x <- TRUE
-  resultados.estacionairdad.y <- TRUE
+  resultados.estacionairdad.x <- EsEstacionaria(x = x.prima, fecha = fechas) #<== # si es true se sigue, sino se para
+  resultados.estacionairdad.y <- EsEstacionaria(x = y.prima, fecha = fechas) #<== # si es true se sigue, sino se para
+  #resultados.estacionairdad.x <- TRUE
+  #resultados.estacionairdad.y <- TRUE
   
   if (resultados.estacionairdad.x == TRUE && resultados.estacionairdad.y == TRUE) {
     lista.ajuste.copulas$son.estacionarias[[i]] <- TRUE
@@ -289,6 +293,8 @@ for ( i in 1:n.realizaciones) {
   
   print(paste0("Acaba de terminar la realización ", i, 'de la estacion ', estacion.usar))
 }
+
+## HASTA ACA TENGO TODO LO NECESARIO PARA LA SIG ETAPA
 
 save(lista.ajuste.copulas, file = paste0('lista.ajuste.copulas', '_estacion_', estacion.usar, '_', escala,'.', variables, '.rda'))
 

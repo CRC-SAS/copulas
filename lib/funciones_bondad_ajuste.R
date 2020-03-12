@@ -156,7 +156,7 @@ TestQCOMHD <- function(x, probs = seq(from = 0.1, to = 1, by = 0.1),
 
 ParametrosADataFrame <- function(parametros.ajuste) {
   parametros <- tibble::enframe(parametros.ajuste) %>%
-    tidyr::unnest() %>%
+    tidyr::unnest(cols = c(value)) %>%
     dplyr::rename(parametro = name, valor = value)
   return (parametros)
 }

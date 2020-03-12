@@ -6,7 +6,7 @@ DeterminarMejorAjusteUnivariado <- function(ajustes = NULL) {
   
   # Inicializar objeto para guardar resultados
   mejor.ajuste <- list(distribucion = NA, metodo_ajuste = NA, parametros = NA,
-    rmse = Inf, ccc = -Inf, cuantiles = 0)
+                       rmse = Inf, ccc = -Inf, cuantiles = 0)
   for (i in 1:length(ajustes)) {
     distribucion <- ajustes[[i]]$distribucion
     atributos <- names(ajustes[[i]])

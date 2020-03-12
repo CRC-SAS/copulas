@@ -183,7 +183,7 @@ AjustarLMomentosExponencial <- function(x, min.cantidad.valores) {
     if (lmomco::are.lmom.valid(mom) && !is.na(sum(mom[[1]])) && !is.nan(sum(mom[[1]]))) {
       # Extraer parametros
       exp.pars <- lmomco::parexp(mom, checklmom = TRUE)
-      if (are.parexp.valid(exp.pars)) {
+      if (lmomco::are.parexp.valid(exp.pars)) {
         ajuste$parametros$xi <- unname(exp.pars$para[1])
         ajuste$parametros$alpha <- unname(exp.pars$para[2])
       }
@@ -259,7 +259,7 @@ AjustarLMomentosGamma <- function(x, min.cantidad.valores) {
     if (lmomco::are.lmom.valid(mom) && !is.na(sum(mom[[1]])) && !is.nan(sum(mom[[1]]))) {
       # Extraer parametros
       gam.pars <- lmomco::lmom2par(mom, type='gam')
-      if (are.pargam.valid(gam.pars)) {
+      if (lmomco::are.pargam.valid(gam.pars)) {
         ajuste$parametros$alpha <- unname(gam.pars$para[1])
         ajuste$parametros$beta <- unname(gam.pars$para[2])
       }

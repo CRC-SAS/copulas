@@ -1,11 +1,27 @@
 
 
+# ------------------------------------------------------------------------------
+# Umbral de p-valor para dictaminar que el test de normalidad falla
+# ------------------------------------------------------------------------------
 umbral.p.valor: 0.05
-n.realizaciones: 1
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Número de series perturbadas a ser consideradas
+# ------------------------------------------------------------------------------
+n.series.perturbadas: 100
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Valores mínimos para la detección de x e y
+# ------------------------------------------------------------------------------
 valor.minimo.deteccion.x: 1
 valor.minimo.deteccion.y: 0.1
+# ------------------------------------------------------------------------------
 
-
+# ------------------------------------------------------------------------------
+# Configuraciones para el ajuste multivariado
+# ------------------------------------------------------------------------------
 configuracion.ajuste.copula:
   - [ familia,   funcion_ajuste,   uso_sequias ]
   - [ "gumbel",  "AjustarCopulaGumbel",   TRUE ]      
@@ -14,10 +30,13 @@ configuracion.ajuste.copula:
   - [ "clayton", "AjustarCopulaClayton",  TRUE ]      
   - [ "normal",  "AjustarCopulaNormal",   TRUE ]       
   - [ "t",       "AjustarCopulatstudent", TRUE ]
+# ------------------------------------------------------------------------------
 
-
+# ------------------------------------------------------------------------------
+# Configuraciones para el ajuste univariado
+# ------------------------------------------------------------------------------
 configuracion.ajuste.univariado:
-  - [ ditribucion, funcion_ajuste_lmomentos,                    funcion_ajuste_maxima_verosimilitud,                 uso_sequias ]
+  - [ distribucion, funcion_ajuste_lmomentos,                    funcion_ajuste_maxima_verosimilitud,                 uso_sequias ]
   - [ "aep4", "AjustarLMomentosAsymetricExponentialPower",      "AjustarMaximaVerosimilitudAsymetricExponentialPower",     FALSE ]
   - [ "cau",  "AjustarLMomentosCauchy",                         "AjustarMaximaVerosimilitudCauchy",                        FALSE ]
   - [ "exl",  "AjustarLMomentosExponencial",                    "AjustarMaximaVerosimilitudExponencial",                   TRUE  ]
@@ -44,4 +63,4 @@ configuracion.ajuste.univariado:
   - [	"tri",	"AjustarLMomentosAsymmetricTriangular",           "AjustarMaximaVerosimilitudAsymmetricTriangular",          FALSE ]
   - [	"wak",	"AjustarLMomentosWakeby",                         "AjustarMaximaVerosimilitudWakeby",                        FALSE ]
   - [	"wei",	"AjustarLMomentosWeibull",                        "AjustarMaximaVerosimilitudWeibull",                       TRUE  ]
-
+# ------------------------------------------------------------------------------
