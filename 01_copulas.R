@@ -294,118 +294,25 @@ if (length(task.mejor.ajuste.errors) > 0) {
 
 
 # -----------------------------------------------------------------------------#
-# --- PASO 5. Ejecutar ajuste, de manera distriuída ----
+# --- PASO 7. Copulas?, de manera distriuída ----
 # -----------------------------------------------------------------------------#
 
-# ## TODO: prueba sin paralelizar
-# ri1 = AjusteUnivariadoUVC(input.value = ubicaciones_x_variables_x_configuraciones[1,], 
-#                           script = script, 
-#                           config = config, 
-#                           eventos.completos =  eventos[1:100,])
-# ri2 = AjusteUnivariadoUVC(input.value = ubicaciones_x_variables_x_configuraciones[2,], 
-#                           script = script, 
-#                           config = config, 
-#                           eventos.completos =  eventos[1:100,])
-# rix = dplyr::bind_rows(ri1, ri2)
-# 
-## TODO: prueba paralelizando sin Task
-# cluster <- snow::makeCluster(type = "SOCK", spec = rep('localhost', length.out = 2))
-# #cluster <- parallel::makeCluster(2)
-# functions <- purrr::keep(
-#   .x = base::ls(envir = base::globalenv()),
-#   .p = function(obj.name) {
-#     obj <- base::get(obj.name, envir = base::globalenv())
-#     return ("function" %in% class(obj))
-#   }
-# )
-# snow::clusterExport(cluster, functions)
-# doSNOW::registerDoSNOW(cluster)
-# #doParallel::registerDoParallel(cluster)
-# resultado <- foreach::foreach(i = 1:2, .combine = dplyr::bind_rows, .multicombine = T,
-#                               .packages = c('dplyr', 'foreach'))  %dopar% {
-#   ri = AjusteUnivariadoUVC(input.value = ubicaciones_x_variables_x_configuraciones[i,],
-#                            script = script, config = config, eventos.completos =  eventos[1:100,])
-#   return(ri)
-# }
-# resultado <- foreach::foreach(input.value = iterators::iter(obj = ubicaciones_x_variables_x_configuraciones[1:2,], by = 'row'),
-#                               .combine = dplyr::bind_rows, .multicombine = T, .packages = c('dplyr', 'foreach'), .export = functions)  %dopar% {
-#   ri = AjusteUnivariadoUVC(input.value = input.value, script = script, config = config, eventos.completos =  eventos[1:100,])
-#   return(ri)
-# }
-# foreach::registerDoSEQ()
-# snow::stopCluster(cluster)
-# #parallel::stopCluster(cluster)
-
-# Definir el nombre de la función a ser paralelizada!
-# if (config$max.procesos > 1) {
-#   # Se ejecuta todo de manera distribuida, pero hay dos situaciones posibles
-#   if (nrow(ubicaciones) > 1) {
-#     # Se paraleliza la ejecución en base a las ubicaciones
-#     function_name <- "CopulasPorUbicacion" # Nombre de la función a ser distribuida
-#   } else {
-#     # Se paraleliza la ejecución en base a las series perturbadas
-#     function_name <- "CopulasPorSeriePerturbada" # Nombre de la función a ser distribuida
-#   }
-# } else {
-#   # Se ejecuta todo secuencialmente, los tasks son por estación
-#   function_name <- "CopulasPorUbicacion" # Nombre de la función a ser distribuida
-# }
-function_name <- "AjusteUnivariadoUVC"
-
-# Definir nombre de archivos .log y .out de corridas anteriores
-task_logfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.log")
-task_outfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.out")
-
-# Borrar archivos .log y .out de corridas anteriores
-if (file.exists(task_logfile))
-  file.remove(task_logfile)
-if (file.exists(task_outfile))
-  file.remove(task_outfile)
-
-# Crear tarea distribuida y ejecutarla
-task.ajustar <- Task$new(parent.script = script,
-                         func.name = function_name,
-                         packages = list.of.packages)
-
-# Informar inicio de ejecución 
-script$info("Computando ajuste univariado para cada combinación de ubicación, variable, configuración")
-# Ejecutar tarea distribuida
-ajustes.x.ubic.var.conf <- task.ajustar$run(number.of.processes = config$max.procesos,
-                                            input.values = ubicaciones_x_variables_x_configuraciones[1:2,],  
-                                            config = config, eventos.completos = eventos[1:100,])
-
-# Agregar log de la tarea al log del script
-file.append(script_logfile, task_logfile)
-
-# Transformar resultados a un objeto de tipo tibble
-ajustes.x.ubic.var.conf.tibble <- ajustes.x.ubic.var.conf %>% purrr::map_dfr(~.x)
+# ------------------------------------------------------------------------------
 
 
+# -----------------------------------------------------------------------------#
+# --- PASO 8. Finalizar script ----
+# -----------------------------------------------------------------------------#
 
-# Guardar resultados en un archivo fácil de compartir
+# a) Guardar resultados en un archivo fácil de compartir
 results_filename <- glue::glue("{config$dir$data}/{config$files$copulas$resultados}")
 script$info(glue::glue("Guardando resultados en el archivo {results_filename}"))
 feather::write_feather(resultados.copulas.tibble, results_filename)
 
-# Si hay errores, terminar ejecucion
-task.ajustar <- task.ajustar$getErrors()
-if (length(task.estadisticas.errors) > 0) {
-  for (error.obj in task.estadisticas.errors) {
-    id_column <- IdentificarIdColumn(ubicaciones %>% dplyr::top_n(1))
-    script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}): {error.obj$error}"))
-  }
-  script$error("Finalizando script de forma ANORMAL")
-}
-# ------------------------------------------------------------------------------
-
-# -----------------------------------------------------------------------------#
-# --- PASO 6. Finalizar script ----
-# -----------------------------------------------------------------------------#
-
-# a) Finalizar script
+# b) Finalizar script
 script$stop()
 
-# b) Crear archivo .info
+# c) Crear archivo .info
 info_filename <- glue::glue("{config$dir$data}/{config$files$copulas$info_corrida}")
 if (file.exists(info_filename))
   file.remove(info_filename)

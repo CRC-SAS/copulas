@@ -39,10 +39,6 @@ vignettes/*.pdf
 .Renviron
 
 # 
-data/control/*
-data/partial/*
-data/output/*
-**/run/*
 *.yml
 !param*.yml
 **/.svn_ignore.txt
