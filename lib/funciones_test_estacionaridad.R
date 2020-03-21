@@ -7,8 +7,8 @@ DetectarEmpates <- function(x) {
 }
 
 
-# Definición de función para el test de estacionaridad de Box-Pierce y Ljung-Box (Univariado)
-TestBoxPierceLjungBox <- function(x) {
+# Definici?n de funci?n para el test de estacionaridad de Box-Pierce y Ljung-Box (Univariado)
+TestBoxPierceLjungBox <- function(x, fechas) {
   
   # Inicializar objeto a devolver
   resultado <- list(p.value = NA, statistic = NA)
@@ -22,23 +22,23 @@ TestBoxPierceLjungBox <- function(x) {
   return(resultado)
 }
 
-# Definición de función para el test de estacionaridad empírico
-TestEstacionaridadEmpirico <- function(x, fecha = fechas) {
+# Definici?n de funci?n para el test de estacionaridad emp?rico
+TestEstacionaridadEmpirico <- function(x, fechas) {
   
   # Inicializar objeto a devolver
   resultado <- list(p.value = NA, statistic = NA)
   # Comprobar que el vector sea del tipo xts
-  if(!is.xts(x)) {
-    x.xts <- xts::xts(x = x, order.by = fecha)
+  if(!xts::is.xts(x)) {
+    x.xts <- xts::xts(x = x, order.by = fechas)
   } else {
     x.xts <- x
   }
   
-  # Crear distribuci;on del estadístico
-  sI.distribucion <- serialIndepTestSim(nrow(x.xts), lag.max = 10) 
+  # Crear distribuci;on del estad?stico
+  sI.distribucion <- copula::serialIndepTestSim(nrow(x.xts), lag.max = 10) 
   
   # Correr test
-  resultado.test <- serialIndepTest(x.xts, d = sI.distribucion)
+  resultado.test <- copula::serialIndepTest(x.xts, d = sI.distribucion)
   
   # Devolver objeto con los resultados
   resultado$p.value <- unname(resultado.test$global.statistic.pvalue)
@@ -49,13 +49,13 @@ TestEstacionaridadEmpirico <- function(x, fecha = fechas) {
 }
 
 # Definicion de funcion para el test de punto de cambio
-TestPuntoCambioUni <- function(x, fecha = fechas) {
+TestPuntoCambioUni <- function(x, fechas) {
   
   # Inicializar objeto a devolver
   resultado <- list(p.value = NA, statistic = NA)
   # Comprobar que el vector sea del tipo xts
-  if(!is.xts(x)) {
-    x.xts <- xts::xts(x = x, order.by = fecha)
+  if(!xts::is.xts(x)) {
+    x.xts <- xts::xts(x = x, order.by = fechas)
   } else {
     x.xts <- x
   }
@@ -73,13 +73,13 @@ TestPuntoCambioUni <- function(x, fecha = fechas) {
 }
 
 # Definicion de funcion para el test de punto de cambio en la autocopula
-TestPuntoCambioAutocopula <- function(x, fecha = fechas) {
+TestPuntoCambioAutocopula <- function(x, fechas) {
   
   # Inicializar objeto a devolver
   resultado <- list(p.value = NA, statistic = NA)
   # Comprobar que el vector sea del tipo xts
-  if(!is.xts(x)) {
-    x.xts <- xts::xts(x = x, order.by = fecha)
+  if(!xts::is.xts(x)) {
+    x.xts <- xts::xts(x = x, order.by = fechas)
   } else {
     x.xts <- x
   }
@@ -97,13 +97,13 @@ TestPuntoCambioAutocopula <- function(x, fecha = fechas) {
 }
 
 # Definicion de funcion para el test de Mann-Kendall
-TestMannKendall <- function(x, fecha = fechas) {
+TestMannKendall <- function(x, fechas) {
   
   # Inicializar objeto a devolver
   resultado <- list(p.value = NA, statistic = NA)
   # Comprobar que el vector sea del tipo xts
-  if(!is.xts(x)) {
-    x.xts <- xts::xts(x = x, order.by = fecha)
+  if(!xts::is.xts(x)) {
+    x.xts <- xts::xts(x = x, order.by = fechas)
   } else {
     x.xts <- x
   }
@@ -121,7 +121,7 @@ TestMannKendall <- function(x, fecha = fechas) {
 }
 
 # Definicion de funcion para consolidar tests de estacionaridad 
-EsEstacionaria <- function(x = x, fecha = fechas) {
+EsEstacionaria <- function(x, fechas, umbral.p.valor) {
   # Inicializar objeto a devolver
   resultados.tests <- list(pasa.tests = TRUE)
   
@@ -130,7 +130,7 @@ EsEstacionaria <- function(x = x, fecha = fechas) {
     .f = function(test.name) {
       func.name <- paste0("Test", test.name)
       tryCatch({
-        estadisticos.test <- ParametrosADataFrame(do.call(what = func.name, args = list(x = x, fecha = fecha))) %>%
+        estadisticos.test <- ParametrosADataFrame(do.call(what = func.name, args = list(x = x, fechas = fechas))) %>%
           dplyr::mutate(test = test.name) %>%
           dplyr::select(test, parametro, valor)
       }, error = function(e) {
@@ -159,7 +159,7 @@ TestPuntoCambioMulti <- function(x, variable = c('duracion.prima', 'intensidad')
   # Inicializar objeto a devolver
   resultado <- list(p.value = NA, statistic = NA)
   # Comprobar que el vector sea del tipo xts
-  if(!is.xts(x)) {
+  if(!xts::is.xts(x)) {
     x.xts <- xts::xts(x = x[,variable], order.by = x$fecha_inicio)
   } else {
     x.xts <- x

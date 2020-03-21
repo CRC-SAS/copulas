@@ -78,12 +78,14 @@ valor.minimo.deteccion.y <- config$params$valor.minimo.deteccion.y
 # Paso 5: Conectar base de datos ----
 
 # eventos.completos
-ev_file <- "/home/dbonhaure/RStudioProjects/copulas/data/input/eventos_identificados.feather"
-eventos.completos <- feather::read_feather(ev_file)  # read("eventos.completos.rda")
-eventos.completos <- eventos.completos %>% dplyr::rename(estacion_id = station_id)
+# ev_file <- "/home/dbonhaure/RStudioProjects/Copulas/data/input/eventos_identificados.feather"
+# eventos.completos <- feather::read_feather(ev_file)
+# eventos.completos <- eventos.completos %>% dplyr::rename(estacion_id = station_id)
+ev_file <- "/home/dbonhaure/RStudioProjects/Copulas/data/input/eventos.completos.rda"
+load(ev_file) 
 
 # estacion.usar <- '87750'
-estaciones <- c('87548')
+estaciones <- c('87624')
 escala <- 3L
 variables <- c('duracion-minimo')
 
@@ -107,8 +109,8 @@ fechas <- eventos.estacion$fecha_inicio
 parametros.lmomentos            <- list(x = x, min.cantidad.valores = 50)
 parametros.maxima.verosimilitud <- list(x = x, min.cantidad.valores = 50, numero.muestras = NULL)
 
-ajuste.univariado.x <- AjusteUnivariado(x = x[1:100], p.valor = umbral.p.valor, 
-                                        configuracion = configuracion.ajuste.univariado[7,],
+ajuste.univariado.x <- AjusteUnivariado(x = x, p.valor = umbral.p.valor, 
+                                        configuracion = configuracion.ajuste.univariado[1,],
                                         parametros.lmomentos, parametros.maxima.verosimilitud)
 
 
@@ -117,8 +119,8 @@ ajuste.univariado.x <- AjusteUnivariado(x = x[1:100], p.valor = umbral.p.valor,
 parametros.lmomentos            <- list(x = y, min.cantidad.valores = 50)
 parametros.maxima.verosimilitud <- list(x = y, min.cantidad.valores = 50, numero.muestras = NULL)
 
-ajuste.univariado.y <- AjusteUnivariado(x = y[1:100], p.valor = umbral.p.valor, 
-                                        configuracion = configuracion.ajuste.univariado[7,],
+ajuste.univariado.y <- AjusteUnivariado(x = y, p.valor = umbral.p.valor, 
+                                        configuracion = configuracion.ajuste.univariado[2,],
                                         parametros.lmomentos, parametros.maxima.verosimilitud)
 
 # ------------------------------------------------------------------------------

@@ -1,5 +1,7 @@
 # -----------------------------------------------------------------------------#
-# --- PASO 1. Cargar paquetes necesarios ----
+# --- PASO 1. Cargar paquetes necesarios                                    ----
+# -----------------------------------------------------------------------------#
+
 rm(list = ls()); gc()
 Sys.setenv(TZ = "UTC")
 list.of.packages <- c("dplyr", "purrr", "lubridate", "magrittr", 
@@ -13,10 +15,12 @@ for (pack in list.of.packages) {
   }
 }
 rm(pack); gc()
+
 # ------------------------------------------------------------------------------
 
+
 # -----------------------------------------------------------------------------#
-# --- PASO 2. Leer archivo de configuracion ----
+# --- PASO 2. Leer archivo de configuracion                                 ----
 # -----------------------------------------------------------------------------#
 
 normalize_dirnames <- function(dirnames) {
@@ -83,10 +87,12 @@ if (! file.exists(archivo.nombres)) {
 }
 
 rm(archivo.config, archivo.params, archivo.nombres, args); gc()
+
 # ------------------------------------------------------------------------------
 
+
 # -----------------------------------------------------------------------------#
-# --- PASO 3. Cargar librerias propias e iniciar script ----
+# --- PASO 3. Cargar librerias propias e iniciar script                     ----
 # -----------------------------------------------------------------------------#
 
 # a) Cargar librerias
@@ -123,8 +129,9 @@ script$start()
 
 # ------------------------------------------------------------------------------
 
+
 # -----------------------------------------------------------------------------#
-# --- PASO 4. Leer/procesar variables de entrada ----
+# --- PASO 4. Leer/procesar variables de entrada                            ----
 # -----------------------------------------------------------------------------#
 
 ## CONFIGURACIÓN AJUSTES
@@ -172,33 +179,40 @@ if (!all(ids_in_params %in% ids_in_events))
 
 # Obtener variables a ser consideradas (deben existir en eventos!)
 variables <- purrr::pmap_dfr(
-  .l = config$params$variables %>% purrr::transpose(), 
+  .l = config$params$variables_copulas %>% purrr::transpose(), 
   .f = function(...) { tibble::tibble(...) %>% setNames(c('variable_x', 'variable_y')) }
 )
 # Controlar que las variables seleccionadas sean columnas de eventos!
 if (!all(union(variables$variable_x, variables$variable_y) %in% colnames(eventos)))
   stop("No hay datos, en eventos, para todas las variables en parametros_copulas.yml")
 
-
-## CONTROL ITERACIÓN
-
-# Definir el objetos sobre los cuales iterar
-ubicaciones_x_variables <- 
-  tidyr::crossing(ubicaciones, variable = union(variables$variable_x, variables$variable_y))
-
-# Definir el objetos sobre los cuales iterar
-ubicaciones_x_variables_x_configuraciones <- 
-  tidyr::crossing(ubicaciones, variable = union(variables$variable_x, variables$variable_y),
-                  configuracion.ajuste.univariado)
+valores_minimos <- purrr::pmap_dfr(
+  .l = config$params$valores_minimos %>% purrr::transpose(), 
+  .f = function(...) { tibble::tibble(...) %>% setNames(c('variable', 'valor_minimo_deteccion')) }
+)
+# Controlar que hayan valores mínimos para todas las variables!
+if (!all(union(variables$variable_x, variables$variable_y) %in% valores_minimos$variable))
+  stop("No hay datos, en eventos, para todas las variables en parametros_copulas.yml")
 
 # ------------------------------------------------------------------------------
 
 
 # -----------------------------------------------------------------------------#
-# --- PASO 5. Ejecutar ajustes, de manera distriuída ----
+# --- PASO 5. Ajustar, por separado, cada una de las variables que conforman las
+# --- cópulas, parámetro: variables_copulas, a las distribuciones señaladas en el  
+# --- archivo de parámetros, parámetro: configuracion.ajuste.univariado. ----
+# --- Clave primaria: ubicación, variable, distribución
 # -----------------------------------------------------------------------------#
 
-function_name <- "AjusteUnivariadoUVC"
+
+# Definir el objetos sobre los cuales iterar
+ubicaciones_x_variables_x_distribuciones <- 
+  tidyr::crossing(ubicaciones, variable = union(variables$variable_x, variables$variable_y),
+                  configuracion.ajuste.univariado)
+
+
+# Definir el nombre de la función a ser paralelizada
+function_name <- "AjusteUnivariadoUVD"
 
 # Definir nombre de archivos .log y .out de corridas anteriores
 task_logfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.log")
@@ -219,8 +233,8 @@ task.ajustar <- Task$new(parent.script = script,
 script$info("Computando ajuste univariado para cada combinación de ubicación, variable, configuración")
 # Ejecutar tarea distribuida
 ajustes.x.ubic.var.conf <- task.ajustar$run(number.of.processes = config$max.procesos,
-                                            input.values = ubicaciones_x_variables_x_configuraciones[5:7,],  
-                                            config = config, eventos.completos = eventos[1:100,])
+                                            input.values = ubicaciones_x_variables_x_distribuciones[c(1:4,40:43),],  
+                                            config = config, eventos.completos = eventos)
 
 # Transformar resultados a un objeto de tipo tibble
 ajustes.x.ubic.var.conf.tibble <- ajustes.x.ubic.var.conf %>% purrr::map_dfr(~.x)
@@ -232,7 +246,7 @@ file.append(script_logfile, task_logfile)
 task.ajustar.errors <- task.ajustar$getErrors()
 if (length(task.ajustar.errors) > 0) {
   for (error.obj in task.ajustar.errors) {
-    id_column <- IdentificarIdColumn(ubicaciones_x_variables_x_configuraciones[1,])
+    id_column <- IdentificarIdColumn(ubicaciones_x_variables_x_distribuciones[1,])
     script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
                            "variable=\"{error.obj$input.value[['variable']]}\", ",
                            "distribucion=\"{error.obj$input.value[['distribucion']]}\")",
@@ -245,9 +259,20 @@ if (length(task.ajustar.errors) > 0) {
 
 
 # -----------------------------------------------------------------------------#
-# --- PASO 6. Determinar mejor ajuste ----
+# --- PASO 6. Determinar la distribución que mejor se ajusta a cada una de las
+# --- variables en cada una de las ubicaciones. ----
+# --- Clave primaria: ubicación, variable
+# --- OBS: a partir de acá para cada variable, en cada ubicación, ya se sabe 
+# --- cual es la distribución que mejor ajusta y el mejor método de ajuste
 # -----------------------------------------------------------------------------#
 
+
+# Definir el objetos sobre los cuales iterar
+ubicaciones_x_variables <- 
+  tidyr::crossing(ubicaciones, variable = union(variables$variable_x, variables$variable_y))
+
+
+# Definir el nombre de la función a ser paralelizada
 function_name <- "MejorAjusteUnivariadoUV"
 
 # Definir nombre de archivos .log y .out de corridas anteriores
@@ -294,9 +319,139 @@ if (length(task.mejor.ajuste.errors) > 0) {
 
 
 # -----------------------------------------------------------------------------#
-# --- PASO 7. Copulas?, de manera distriuída ----
+# --- PASO 7. Generar series perturbadas para la distribución que mejor ajusta
+# --- en cada una de las ubicaciones, y además, determinar los parámetros de
+# --- ajuste de cada una de esas series perturbadas. ----
+# --- Clave primaria: ubicación, variable, serie_perturbada
+# --- OBS: la distribución ya no forma parte de la clave primaria porque cada
+# --- par ubicación, variable, ya tiene definida la mejor distribución y el 
+# --- mejor método de ajuste
 # -----------------------------------------------------------------------------#
 
+
+# Definir el objetos sobre los cuales iterar
+mejor_ajuste_x_n_series_perturbadas <- mejor.ajuste.x.ubic.var.tibble %>% 
+  dplyr::select(-parametros, -rmse, -ccc, -cuantiles) %>%
+  dplyr::left_join(configuracion.ajuste.univariado, by = "distribucion") %>%
+  dplyr::mutate(funcion_mejor_ajuste = ifelse(mejor_ajuste == 'lmomentos', 
+                                              funcion_ajuste_lmomentos, 
+                                              funcion_ajuste_maxima_verosimilitud)) %>%
+  dplyr::select(-funcion_ajuste_lmomentos, -funcion_ajuste_maxima_verosimilitud) %>%
+  tidyr::crossing(n_serie_perturbada = 1:config$params$n.series.perturbadas) %>%
+  dplyr::left_join(valores_minimos, by = "variable")
+
+
+# Definir el nombre de la función a ser paralelizada
+function_name <- "AplicarMejorAjusteASeriesPerturbadas"
+
+# Definir nombre de archivos .log y .out de corridas anteriores
+task_logfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.log")
+task_outfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.out")
+
+# Borrar archivos .log y .out de corridas anteriores
+if (file.exists(task_logfile))
+  file.remove(task_logfile)
+if (file.exists(task_outfile))
+  file.remove(task_outfile)
+
+# Crear tarea distribuida y ejecutarla
+task.series.perturbadas <- Task$new(parent.script = script,
+                                    func.name = function_name,
+                                    packages = list.of.packages)
+
+# Informar inicio de ejecución 
+script$info("Generar series perturbadas y aplicarles el mejor ajuste")
+# Ejecutar tarea distribuida
+series.perturbadas.ajustadas <- task.series.perturbadas$run(number.of.processes = config$max.procesos,
+                                                            input.values = mejor_ajuste_x_n_series_perturbadas,  
+                                                            eventos.completos = eventos.completos)
+
+# Transformar resultados a un objeto de tipo tibble
+series.perturbadas.ajustadas.tibble <- series.perturbadas.ajustadas %>% purrr::map_dfr(~.x)
+
+# Agregar log de la tarea al log del script
+file.append(script_logfile, task_logfile)
+
+# Si hay errores, terminar ejecucion
+task.series.perturbadas.errors <- task.series.perturbadas$getErrors()
+if (length(task.series.perturbadas.errors) > 0) {
+  for (error.obj in task.series.perturbadas.errors) {
+    id_column <- IdentificarIdColumn(mejor_ajuste_x_n_series_perturbadas[1,])
+    script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
+                           "variable=\"{error.obj$input.value[['variable']]}\", ",
+                           "distribucion=\"{error.obj$input.value[['distribucion']]}\", ",
+                           "n_serie_perturbada={error.obj$input.value[['n_serie_perturbada']]})",
+                           ": {error.obj$error}"))
+  }
+  script$error("Finalizando script de forma ANORMAL")
+}
+
+# ------------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------#
+# --- PASO 8. Determinar la estacionariedad de la serie perturbada correspondiente
+# --- a cada variable en cada ubicación ----
+# --- Clave primaria: ubicación, variable, serie_perturbada
+# -----------------------------------------------------------------------------#
+
+
+# Definir el objetos sobre los cuales iterar
+series_perturbadas_ajustadas <- series.perturbadas.ajustadas.tibble
+
+
+# Definir el nombre de la función a ser paralelizada
+function_name <- "DeterminarEstacionariedadDeSeriesPerturbadas"
+
+# Definir nombre de archivos .log y .out de corridas anteriores
+task_logfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.log")
+task_outfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.out")
+
+# Borrar archivos .log y .out de corridas anteriores
+if (file.exists(task_logfile))
+  file.remove(task_logfile)
+if (file.exists(task_outfile))
+  file.remove(task_outfile)
+
+# Crear tarea distribuida y ejecutarla
+task.estacionariedad <- Task$new(parent.script = script,
+                                 func.name = function_name,
+                                 packages = list.of.packages)
+
+# Informar inicio de ejecución 
+script$info("Generar series perturbadas y aplicarles el mejor ajuste")
+# Ejecutar tarea distribuida
+series.perturbadas.estacionariedad <- task.estacionariedad$run(number.of.processes = config$max.procesos,
+                                                               input.values = series_perturbadas_ajustadas,  
+                                                               umbral.p.valor = config$params$umbral.p.valor)
+
+# Transformar resultados a un objeto de tipo tibble
+series.perturbadas.estacionariedad.tibble <- series.perturbadas.estacionariedad %>% purrr::map_dfr(~.x)
+
+# Agregar log de la tarea al log del script
+file.append(script_logfile, task_logfile)
+
+# Si hay errores, terminar ejecucion
+task.estacionariedad.errors <- task.estacionariedad$getErrors()
+if (length(task.estacionariedad.errors) > 0) {
+  for (error.obj in task.estacionariedad.errors) {
+    id_column <- IdentificarIdColumn(mejor_ajuste_x_n_series_perturbadas[1,])
+    script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
+                           "variable=\"{error.obj$input.value[['variable']]}\", ",
+                           "distribucion=\"{error.obj$input.value[['distribucion']]}\", ",
+                           "n_serie_perturbada={error.obj$input.value[['n_serie_perturbada']]})",
+                           ": {error.obj$error}"))
+  }
+  script$error("Finalizando script de forma ANORMAL")
+}
+
+# ------------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------#
+# --- PASO 9. Determinar la dependencia entre las series perturbadas que    ----
+# --- conforman cada una de los pares de variables de las cópulas           ----
+# -----------------------------------------------------------------------------#
 # ------------------------------------------------------------------------------
 
 

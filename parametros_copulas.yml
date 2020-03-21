@@ -4,19 +4,28 @@
 # Definicion de ubicaciones de prueba para diagnosticos
 # ------------------------------------------------------------------------------
 ubicaciones:
-  - { uid: "87548", nombre: "Junin" }
+  - { uid: "87624", nombre: "Desconocida" }
 # ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
-# Definicion de ubicaciones de prueba para diagnosticos
+# Definicion de las variables a ser contempladas en las cópulas
 # ------------------------------------------------------------------------------
-variables:
-  - { variable_x: "duracion", variable_y: "minimo" }
+variables_copulas:
+  - { variable_x: "duracion", variable_y: "minimo"     }
   - { variable_x: "duracion", variable_y: "intensidad" }
   - { variable_x: "magnitud", variable_y: "intensidad" }
-  - { variable_x: "minimo",   variable_y: "magnitud" }
+  - { variable_x: "minimo",   variable_y: "magnitud"   }
 # ------------------------------------------------------------------------------
 
+# ------------------------------------------------------------------------------
+# Definicion valores mínimos para la detección
+# ------------------------------------------------------------------------------
+valores_minimos:
+  - { variable: "duracion",   valor_minimo_deteccion: 1   }
+  - { variable: "intensidad", valor_minimo_deteccion: 0.1 }
+  - { variable: "magnitud",   valor_minimo_deteccion: 0.1 }
+  - { variable: "minimo",     valor_minimo_deteccion: 0.1 }
+# ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
 # Umbral de p-valor para dictaminar que el test de normalidad falla
@@ -27,14 +36,7 @@ umbral.p.valor: 0.05
 # ------------------------------------------------------------------------------
 # Número de series perturbadas a ser consideradas
 # ------------------------------------------------------------------------------
-n.series.perturbadas: 100
-# ------------------------------------------------------------------------------
-
-# ------------------------------------------------------------------------------
-# Valores mínimos para la detección de x e y
-# ------------------------------------------------------------------------------
-valor.minimo.deteccion.x: 1
-valor.minimo.deteccion.y: 0.1
+n.series.perturbadas: 2
 # ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
