@@ -20,8 +20,8 @@ eventos.identificados: "input/eventos_identificados.feather"
 copulas:
 
   # Archivo con los resultados del análisis
-  resultados: "output/copulas_<*idc>.feather"
+  resultados: "output/copulas_<*idc>.rds"
   
   # Archivo con información sobre la corrida
-  info_corrida: "partial/estadisticas_moviles_<*idc>.info"
+  info_corrida: "partial/copulas_<*idc>.info"
 # ----------------------------------------------------------------------------

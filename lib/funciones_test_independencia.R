@@ -1,6 +1,6 @@
 # --- Funciones para testear la independencia de variables ----
 
-# Definición de función para el test de independencia de Kendall (Bivariado)
+# Definici?n de funci?n para el test de independencia de Kendall (Bivariado)
 TestIndKendall <- function(x, y) {
   
   # Inicializar objeto a devolver
@@ -15,7 +15,7 @@ TestIndKendall <- function(x, y) {
   return(resultado)
 }
 
-# Definición de función para el test de independencia de Spearman (Bivariado)
+# Definici?n de funci?n para el test de independencia de Spearman (Bivariado)
 TestIndSpearman <- function(x, y) {
   
   # Inicializar objeto a devolver
@@ -30,13 +30,13 @@ TestIndSpearman <- function(x, y) {
   return(resultado)
 }
 
-# Definición de función para el test de independencia basado en la copula empirica (Bivariado)
+# Definici?n de funci?n para el test de independencia basado en la copula empirica (Bivariado)
 TestIndCopulaEmpirica <- function(x, y) {
   # Inicializar objeto a devolver
   resultado <- list(p.value = NA, statistic = NA)
   
   # Correr test de independencia
-  # Creación de la distribución del estadístico
+  # Creaci?n de la distribuci?n del estad?stico
   distribucion.estadistico <- copula::indepTestSim(n = length(x), 
                                            p = 2, verbose = FALSE)
   
@@ -51,7 +51,7 @@ TestIndCopulaEmpirica <- function(x, y) {
 }
 
 # Definicion de funcion para consolidar tests de independencia
-SonDependientes <- function(x, y) {
+SonDependientes <- function(x, y, umbral.p.valor) {
   # Inicializar objeto a devolver
   resultados.tests <- list(pasa.tests = TRUE)
   

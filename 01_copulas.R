@@ -449,20 +449,143 @@ if (length(task.estacionariedad.errors) > 0) {
 
 
 # -----------------------------------------------------------------------------#
-# --- PASO 9. Determinar la dependencia entre las series perturbadas que    ----
-# --- conforman cada una de los pares de variables de las cópulas           ----
+# --- PASO 9. Determinar la dependencia entre las series perturbadas que
+# --- conforman cada una de los pares de variables de las cópulas ----
 # -----------------------------------------------------------------------------#
+
+# Definir el objetos sobre los cuales iterar
+
+id_column <- IdentificarIdColumn(ubicaciones[1,])
+
+series_perturbadas <- series.perturbadas.estacionariedad.tibble %>% 
+  dplyr::select(!!id_column, variable, n_serie_perturbada, serie_perturbada, es_estacionaria)
+
+input_copulas <- variables %>% 
+  tidyr::crossing(ubicaciones, n_serie_perturbada = 1:config$params$n.series.perturbadas) %>%
+  dplyr::inner_join(series_perturbadas %>% 
+                      dplyr::rename(x_perturbada = serie_perturbada, x_es_estacionaria = es_estacionaria), 
+                   by = c(id_column, 'variable_x' = 'variable', 'n_serie_perturbada')) %>%
+  dplyr::inner_join(series_perturbadas %>% 
+                      dplyr::rename(y_perturbada = serie_perturbada, y_es_estacionaria = es_estacionaria), 
+                    by = c(id_column, 'variable_y' = 'variable', 'n_serie_perturbada'))
+
+
+# Definir el nombre de la función a ser paralelizada
+function_name <- "DeterminarDependenciaEntreSeriesPerturbadas"
+
+# Definir nombre de archivos .log y .out de corridas anteriores
+task_logfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.log")
+task_outfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.out")
+
+# Borrar archivos .log y .out de corridas anteriores
+if (file.exists(task_logfile))
+  file.remove(task_logfile)
+if (file.exists(task_outfile))
+  file.remove(task_outfile)
+
+# Crear tarea distribuida y ejecutarla
+task.dependencia <- Task$new(parent.script = script,
+                             func.name = function_name,
+                             packages = list.of.packages)
+
+# Informar inicio de ejecución 
+script$info("Determinando la dependencia entre las series perturbadas que conforman las cópulas")
+# Ejecutar tarea distribuida
+dependencia.estacionariedad <- task.dependencia$run(number.of.processes = config$max.procesos,
+                                                    input.values = input_copulas, 
+                                                    umbral.p.valor =  config$params$umbral.p.valor)
+
+# Transformar resultados a un objeto de tipo tibble
+dependencia.estacionariedad.tibble <- dependencia.estacionariedad %>% purrr::map_dfr(~.x)
+
+# Agregar log de la tarea al log del script
+file.append(script_logfile, task_logfile)
+
+# Si hay errores, terminar ejecucion
+task.dependencia.errors <- task.dependencia$getErrors()
+if (length(task.dependencia.errors) > 0) {
+  for (error.obj in task.dependencia.errors) {
+    id_column <- IdentificarIdColumn(input_copulas[1,])
+    script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
+                           "copula=\"{error.obj$input.value[['variable_x']]}-{error.obj$input.value[['variable_y']]}\")",
+                           "n_serie_perturbada={error.obj$input.value[['n_serie_perturbada']]})",
+                           ": {error.obj$error}"))
+  }
+  script$error("Finalizando script de forma ANORMAL")
+}
+
 # ------------------------------------------------------------------------------
 
 
 # -----------------------------------------------------------------------------#
-# --- PASO 8. Finalizar script ----
+# --- PASO 10. Ajustar cópulas usando cada una de las series perturbadas. El
+# --- ajuste se realiza únicamente cuando las dos series perturbas son estacionarias 
+# --- y, además, ambas series perturbadas con dependientes ----
+# -----------------------------------------------------------------------------#
+
+# Definir el objetos sobre los cuales iterar
+
+copulas_a_ajustar <- dependencia.estacionariedad.tibble %>%
+  dplyr::filter(x_es_estacionaria, y_es_estacionaria, son_dependientes) %>%
+  dplyr::select(-segundos_calc_dependencia) %>%
+  tidyr::crossing(configuracion.ajuste.copula)
+
+
+# Definir el nombre de la función a ser paralelizada
+function_name <- "AjustarCopulas"
+
+# Definir nombre de archivos .log y .out de corridas anteriores
+task_logfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.log")
+task_outfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.out")
+
+# Borrar archivos .log y .out de corridas anteriores
+if (file.exists(task_logfile))
+  file.remove(task_logfile)
+if (file.exists(task_outfile))
+  file.remove(task_outfile)
+
+# Crear tarea distribuida y ejecutarla
+task.ajustar.copulas <- Task$new(parent.script = script,
+                                 func.name = function_name,
+                                 packages = list.of.packages)
+
+# Informar inicio de ejecución 
+script$info("Ajustar las cópulas usando las series perturbadas estacionarias y dependientes")
+# Ejecutar tarea distribuida
+copulas.ajustadas <- task.ajustar.copulas$run(number.of.processes = config$max.procesos,
+                                              input.values = copulas_a_ajustar,
+                                              umbral.p.valor = config$params$umbral.p.valor)
+
+# Transformar resultados a un objeto de tipo tibble
+copulas.ajustadas.tibble <- copulas.ajustadas %>% purrr::map_dfr(~.x)
+
+# Agregar log de la tarea al log del script
+file.append(script_logfile, task_logfile)
+
+# Si hay errores, terminar ejecucion
+task.ajustar.copulas.errors <- task.ajustar.copulas$getErrors()
+if (length(task.ajustar.copulas.errors) > 0) {
+  for (error.obj in task.ajustar.copulas.errors) {
+    id_column <- IdentificarIdColumn(copulas_a_ajustar[1,])
+    script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
+                           "copula=\"{error.obj$input.value[['variable_x']]}-{error.obj$input.value[['variable_y']]}\")",
+                           "n_serie_perturbada={error.obj$input.value[['n_serie_perturbada']]})",
+                           ": {error.obj$error}"))
+  }
+  script$error("Finalizando script de forma ANORMAL")
+}
+
+# ------------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------#
+# --- PASO 11. Finalizar script ----
 # -----------------------------------------------------------------------------#
 
 # a) Guardar resultados en un archivo fácil de compartir
 results_filename <- glue::glue("{config$dir$data}/{config$files$copulas$resultados}")
 script$info(glue::glue("Guardando resultados en el archivo {results_filename}"))
-feather::write_feather(resultados.copulas.tibble, results_filename)
+saveRDS(copulas.ajustadas.tibble, results_filename)
 
 # b) Finalizar script
 script$stop()

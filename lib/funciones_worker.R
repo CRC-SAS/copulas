@@ -1,6 +1,6 @@
 
 
-DeterminarDependenciaEntreSeriesPerturbadas <- function(input.value, script, x.prima, y.prima) {
+AjustarCopulas <- function(input.value, script, umbral.p.valor) {
   # Obtener la ubicación y las variables de la copula, para cada serie perturbada 
   # (la distribución en única para cada par ubicación, variable)
   vcu <- input.value
@@ -9,9 +9,61 @@ DeterminarDependenciaEntreSeriesPerturbadas <- function(input.value, script, x.p
   id_column <- IdentificarIdColumn(vcu)
   
   # Informar estado de la ejecución
+  script$info(glue::glue("Ajustando cópula \"{vcu$variable_x}-{vcu$variable_y}\" ", 
+                         "para la ubicación = {vcu %>% dplyr::pull(!!id_column)} ",
+                         "serie_perturbada = {vcu$n_serie_perturbada}, familia = ",
+                         "{vcu$familia}, funcion_ajuste = {vcu$funcion_ajuste} "))
+  
+  # Extraer x.prima
+  x.prima <- vcu %>% dplyr::pull(x_perturbada) %>% do.call("c", .)
+  # Extraer y.prima
+  y.prima <- vcu %>% dplyr::pull(y_perturbada) %>% do.call("c", .)
+  
+  # Crear parametros para el ajuste de las copulas
+  parametros <- list(x = x.prima, y = y.prima)
+  
+  # Ajustar 
+  ajuste.copula <- do.call(what = vcu$funcion_ajuste, 
+                           args = parametros)
+  
+  # Calcular bondad de ajuste
+  bondad.ajuste.copula <- TestearBondadAjusteCopulas(x = parametros$x,
+                                                     y = parametros$y,
+                                                     umbral.p.valor = umbral.p.valor, 
+                                                     copula = ajuste.copula)
+
+  
+  return (input.value %>% dplyr::mutate(copula = list(ajuste.copula), 
+                                        bondad.ajuste = list(bondad.ajuste.copula)))
+  
+}
+
+
+DeterminarDependenciaEntreSeriesPerturbadas <- function(input.value, script, umbral.p.valor) {
+  # Obtener la ubicación y las variables de la copula, para cada serie perturbada 
+  # (la distribución es única para cada par ubicación, variable)
+  vcu <- input.value
+  
+  # Identificar la columna con el id de la ubicación (usualmente station_id, o point_id)
+  id_column <- IdentificarIdColumn(vcu)
+  
+  # Informar estado de la ejecución
   script$info(glue::glue("Determinando dependencia de las series perturbadas que componen la copula ", 
-                         "{vcu$variable_x}-{vcu$variable_y} para la ubicación = {vcu %>% dplyr::pull(!!id_column)}, ",
-                         "distribucion = \"{vcu$distribucion}\", serie_perturbada = {vcu$n_serie_perturbada} "))
+                         "\"{vcu$variable_x}-{vcu$variable_y}\" para la ubicación = {vcu %>% dplyr::pull(!!id_column)} ",
+                         "y serie_perturbada = {vcu$n_serie_perturbada} "))
+  
+  # Extraer x.prima
+  x.prima <- vcu %>% dplyr::pull(x_perturbada) %>% do.call("c", .)
+  # Extraer y.prima
+  y.prima <- vcu %>% dplyr::pull(y_perturbada) %>% do.call("c", .)
+  
+  # Calcular estacionariedad
+  t0 <- proc.time()
+  resultados.dependencia <- SonDependientes(x.prima, y.prima, umbral.p.valor)
+  t1 <- proc.time() - t0
+  
+  return (input.value %>% dplyr::mutate(son_dependientes = resultados.dependencia$pasa.tests, 
+                                        segundos_calc_dependencia = t1[["elapsed"]]))
   
 }
 
