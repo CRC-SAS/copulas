@@ -524,9 +524,7 @@ if (length(task.dependencia.errors) > 0) {
 # -----------------------------------------------------------------------------#
 
 # Definir el objetos sobre los cuales iterar
-
 copulas_a_ajustar <- dependencia.estacionariedad.tibble %>%
-  dplyr::filter(x_es_estacionaria, y_es_estacionaria, son_dependientes) %>%
   dplyr::select(-segundos_calc_dependencia) %>%
   tidyr::crossing(configuracion.ajuste.copula)
 
@@ -579,7 +577,135 @@ if (length(task.ajustar.copulas.errors) > 0) {
 
 
 # -----------------------------------------------------------------------------#
-# --- PASO 11. Finalizar script ----
+# --- PASO 11. Determinar al familia que mejor ajusta cada una de las cópulas
+# --- consideradas en cada una de las ubicaciones abordadas ---- 
+# -----------------------------------------------------------------------------#
+
+# Definir el objetos sobre los cuales iterar
+
+id_column <- IdentificarIdColumn(ubicaciones[1,])
+
+copulas_x_ubicacion <- copulas.ajustadas.tibble %>% 
+  dplyr::select(!!id_column, nombre, variable_x, variable_y) %>% 
+  dplyr::distinct()
+
+
+# Definir el nombre de la función a ser paralelizada
+function_name <- "MejorAjusteMultivariadoUC"
+
+# Definir nombre de archivos .log y .out de corridas anteriores
+task_logfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.log")
+task_outfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.out")
+
+# Borrar archivos .log y .out de corridas anteriores
+if (file.exists(task_logfile))
+  file.remove(task_logfile)
+if (file.exists(task_outfile))
+  file.remove(task_outfile)
+
+# Crear tarea distribuida y ejecutarla
+task.mejor.ajuste.copulas <- Task$new(parent.script = script,
+                                      func.name = function_name,
+                                      packages = list.of.packages)
+
+# Informar inicio de ejecución 
+script$info("Determinar la familia que mejor ajusta a cada una de las cópulas en cada ubicación")
+# Ejecutar tarea distribuida
+mejor.ajuste.copulas <- task.mejor.ajuste.copulas$run(number.of.processes = config$max.procesos,
+                                                      input.values = copulas_x_ubicacion,
+                                                      copulas.ajustadas = copulas.ajustadas.tibble,
+                                                      umbral.p.valor = config$params$umbral.p.valor)
+
+# Transformar resultados a un objeto de tipo tibble
+mejor.ajuste.copulas.tibble <- mejor.ajuste.copulas %>% purrr::map_dfr(~.x)
+
+# Agregar log de la tarea al log del script
+file.append(script_logfile, task_logfile)
+
+# Si hay errores, terminar ejecucion
+task.mejor.ajuste.copulas.errors <- task.mejor.ajuste.copulas$getErrors()
+if (length(task.mejor.ajuste.copulas.errors) > 0) {
+  for (error.obj in task.mejor.ajuste.copulas.errors) {
+    id_column <- IdentificarIdColumn(copulas_x_ubicacion[1,])
+    script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
+                           "copula=\"{error.obj$input.value[['variable_x']]}-{error.obj$input.value[['variable_y']]}\")",
+                           "familia=\"{error.obj$input.value[['familia']]}\", funcion_ajuste=\"{error.obj$input.value[['funcion_ajuste']]}\")",
+                           ": {error.obj$error}"))
+  }
+  script$error("Finalizando script de forma ANORMAL")
+}
+
+# ------------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------#
+# --- PASO 12. Finalmente, realizar el ajuste multivariado ---- 
+# --- OBS: como el ajuste multivariado también debe realizarse sobre la serie 
+# --- observada, se combina esta combina ésta con las series perturbadas en 
+# --- un solo input, pero con n_serie_perturbada igual a cero!!
+# -----------------------------------------------------------------------------#
+
+# Definir el objetos sobre los cuales iterar
+
+id_column <- IdentificarIdColumn(ubicaciones[1,])
+
+copulas_x_ubicacion_x_serie <- mejor.ajuste.copulas.tibble %>%
+  dplyr::select(!!id_column, nombre, variable_x, variable_y) %>%
+  tidyr::crossing(n_serie_perturbada = 0:config$params$n.series.perturbadas) # la serie perturbada 0 indica que se deben usar datos observados
+
+
+# Definir el nombre de la función a ser paralelizada
+function_name <- "AplicarMejorAjusteACopulas"
+
+# Definir nombre de archivos .log y .out de corridas anteriores
+task_logfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.log")
+task_outfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.out")
+
+# Borrar archivos .log y .out de corridas anteriores
+if (file.exists(task_logfile))
+  file.remove(task_logfile)
+if (file.exists(task_outfile))
+  file.remove(task_outfile)
+
+# Crear tarea distribuida y ejecutarla
+task.aplicar.mejor.ajuste.copulas <- Task$new(parent.script = script,
+                                              func.name = function_name,
+                                              packages = list.of.packages)
+
+# Informar inicio de ejecución 
+script$info("Aplicar el mejor ajuste multivariado a cada una de las cópulas en cada ubicación")
+# Ejecutar tarea distribuida
+ajuste.multivariado.final <- task.aplicar.mejor.ajuste.copulas$run(number.of.processes = config$max.procesos,
+                                                                   input.values = copulas_x_ubicacion_x_serie,
+                                                                   copulas.ajustadas = copulas.ajustadas.tibble,
+                                                                   mejor.ajuste.univariado = mejor.ajuste.x.ubic.var.tibble,
+                                                                   mejor.ajuste.multivariado = mejor.ajuste.copulas.tibble,
+                                                                   eventos.completos = eventos.completos)
+
+# Transformar resultados a un objeto de tipo tibble
+ajuste.multivariado.final.tibble <- ajuste.multivariado.final %>% purrr::map_dfr(~.x)
+
+# Agregar log de la tarea al log del script
+file.append(script_logfile, task_logfile)
+
+# Si hay errores, terminar ejecucion
+task.aplicar.mejor.ajuste.copulas.errors <- task.aplicar.mejor.ajuste.copulas$getErrors()
+if (length(task.aplicar.mejor.ajuste.copulas.errors) > 0) {
+  for (error.obj in task.aplicar.mejor.ajuste.copulas.errors) {
+    id_column <- IdentificarIdColumn(copulas_x_ubicacion_x_serie[1,])
+    script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
+                           "copula=\"{error.obj$input.value[['variable_x']]}-{error.obj$input.value[['variable_y']]}\")",
+                           "n_serie_perturbada = {error.obj$input.value[['n_serie_perturbada']]})",
+                           ": {error.obj$error}"))
+  }
+  script$error("Finalizando script de forma ANORMAL")
+}
+
+# ------------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------#
+# --- PASO XX. Finalizar script ----
 # -----------------------------------------------------------------------------#
 
 # a) Guardar resultados en un archivo fácil de compartir
