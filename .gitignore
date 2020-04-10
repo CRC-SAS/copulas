@@ -42,3 +42,4 @@ vignettes/*.pdf
 *.yml
 !param*.yml
 **/.svn_ignore.txt
+pruebas/

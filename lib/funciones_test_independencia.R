@@ -37,11 +37,9 @@ TestIndCopulaEmpirica <- function(x, y) {
   
   # Correr test de independencia
   # Creaci?n de la distribuci?n del estad?stico
-  distribucion.estadistico <- copula::indepTestSim(n = length(x), 
-                                           p = 2, verbose = FALSE)
+  distribucion.estadistico <- copula::indepTestSim(n = length(x), p = 2, verbose = FALSE, N = 100)
   
-  resultado.test <- copula::indepTest(matrix(c(x, y), ncol = 2, byrow = F), 
-                              d = distribucion.estadistico)
+  resultado.test <- copula::indepTest(matrix(c(x, y), ncol = 2, byrow = F), d = distribucion.estadistico)
   
   # Devolver objeto con los resultados
   resultado$p.value <- unname(resultado.test$pvalues)
@@ -51,34 +49,35 @@ TestIndCopulaEmpirica <- function(x, y) {
 }
 
 # Definicion de funcion para consolidar tests de independencia
-SonDependientes <- function(x, y, umbral.p.valor) {
-  # Inicializar objeto a devolver
-  resultados.tests <- list(pasa.tests = TRUE)
+SonDependientes <- function(x, y, tests.dependencia, umbral.p.valor) {
   
-  estadisticos <- purrr::map_dfr(
-    .x = c("Kendall", "Spearman", "CopulaEmpirica"),
-    .f = function(test.name) {
+  resultados.tests <- purrr::accumulate(
+    .x = tests.dependencia,
+    .f = function(prev.result, test.name) {
+      if (!purrr::is_empty(prev.result$pasa.test))
+        if (!dplyr::last(prev.result$pasa.test))
+          return (prev.result)
       func.name <- paste0("TestInd", test.name)
       tryCatch({
-        estadisticos.test <- ParametrosADataFrame(do.call(what = func.name, args = list(x = x, y = y))) %>%
-          dplyr::mutate(test = test.name) %>%
-          dplyr::select(test, parametro, valor)
+        p.value <- ParametrosADataFrame(
+          do.call(what = func.name, args = list(x = x, y = y))) %>%
+          dplyr::filter(parametro == "p.value") %>%
+          dplyr::pull(valor)
+        if (is.na(p.value) || p.value > umbral.p.valor) 
+          return (prev.result %>% dplyr::bind_rows(
+            tibble::tibble(pasa.test = FALSE, test.name = test.name, p.value = p.value, exec.error = FALSE)))
+        else
+          return (prev.result %>% dplyr::bind_rows(
+            tibble::tibble(pasa.test = TRUE, test.name = test.name, p.value = p.value, exec.error = FALSE)))
       }, error = function(e) {
         cat(e$message, "\n")
-        return (NULL)
+        return (prev.result %>% dplyr::bind_rows(
+          tibble::tibble(pasa.test = FALSE, test.name = test.name, p.value = NA, exec.error = TRUE)))
       })
-    }
+    },
+    .init = tibble::tibble(pasa.test = logical(), test.name = character(), p.value = double(), exec.error = logical())
   )
-
-  # Determinar si pasan los tests o no
-  p.values <- estadisticos %>%
-    dplyr::filter(parametro == "p.value") %>%
-    dplyr::pull(valor)
-  if (any(is.na(p.values)) || any(p.values > umbral.p.valor)) {
-    resultados.tests$pasa.tests <- FALSE  
-  } else {
-    resultados.tests$pasa.tests <- TRUE 
-  }
+  
   # Devolver resultados
   return (resultados.tests)
 }

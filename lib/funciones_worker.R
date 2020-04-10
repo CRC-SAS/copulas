@@ -13,13 +13,14 @@ AplicarMejorAjusteACopulas <- function(input.value, script, copulas.ajustadas,
   script$info(glue::glue("Aplicando el mejor ajuste multivariado a la ",
                          "copula \"{ucs$variable_x}-{ucs$variable_y}\", ",
                          "ubicación = {ucs %>% dplyr::pull(!!id_column)}, ",
-                         "serie_perturbada = {ucs$n_serie_perturbada}"))
+                         "tipo_serie = \"{ucs$tipo_serie}\", ",
+                         "n_serie = {ucs$n_serie}"))
   
   # Extraer la familia que mejor ajusta esta cópula
   mejor_familia <- mejor.ajuste.multivariado %>% 
     dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
                   variable_x == input.value$variable_x, variable_y == input.value$variable_y) %>%
-    dplyr::pull(mejor_familia)
+    dplyr::pull(familia)
   
   # Se seleccionan las copulas que fueron ajustas utilizando la que resultó ser la mejor familia
   copulas_ajustadas_familia <- copulas.ajustadas %>%
@@ -29,50 +30,34 @@ AplicarMejorAjusteACopulas <- function(input.value, script, copulas.ajustadas,
   
   # Se extraen los parámetros obtenidos al ajustar cada una de las series perturbadas
   # utilizando la mejor familia
-  parametros_x_serie_perturbada <- purrr::map2_dfr(
-    .x = copulas_ajustadas_familia$n_serie_perturbada,
+  parametros_x_serie <- purrr::map2_dfr(
+    .x = copulas_ajustadas_familia$n_serie,
     .y = copulas_ajustadas_familia$copula,
-    .f = function(n_serie_perturbada, copula) {
-      return(tibble::tibble(n_serie_perturbada = !!n_serie_perturbada,
+    .f = function(n_serie, copula) {
+      return(tibble::tibble(n_serie = !!n_serie,
                             parametro = copula$parametro[[1]]))
     })
   
   # Se calcula la mediana de los parametros obtenidos en el paso anterior
-  parametro_mejor_copula <- median(parametros_x_serie_perturbada$parametro)
+  parametro_mejor_copula <- median(parametros_x_serie$parametro)
   
   # A partir de parametro promediado, se crea una nueva mejor cópula
   mejor_copula <- do.call(what = paste0(mejor_familia, "Copula"), 
                           args = list(param = parametro_mejor_copula, dim = 2))
   
-  # Se determinan los valores para variable x a ser utilizados en el ajuste multivariado
-  if (input.value$n_serie_perturbada == 0) {
-    # Si se deben utilizar datos observados, estos se toman de eventos.completos (y se toma el valor absoluto)
-    variable_x <- eventos.completos %>%
-      dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column), tipo_evento == 'seco') %>%
-      dplyr::pull(input.value$variable_x) %>% abs()
-  } else {
-    # Si se debe utilizar alguna de las series perturbadas, estos se toman de copulas.ajustadas
-    variable_x <- copulas.ajustadas %>%
-      dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column), 
-                    variable_x == input.value$variable_x, variable_y == input.value$variable_y,
-                    n_serie_perturbada == input.value$n_serie_perturbada) %>%
-      dplyr::pull(x_perturbada) %>% do.call("c", .)
-  }
-  
-  # Se determinan los valores para variable y a ser utilizados en el ajuste multivariado
-  if (input.value$n_serie_perturbada == 0) {
-    # Si se deben utilizar datos observados, estos se toman de eventos.completos (y se toma el valor absoluto)
-    variable_y <- eventos.completos %>%
-      dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column), tipo_evento == 'seco') %>%
-      dplyr::pull(input.value$variable_y) %>% abs()
-  } else {
-    # Si se debe utilizar alguna de las series perturbadas, estos se toman de copulas.ajustadas
-    variable_y <- copulas.ajustadas %>%
-      dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column), 
-                    variable_x == input.value$variable_x, variable_y == input.value$variable_y,
-                    n_serie_perturbada == input.value$n_serie_perturbada) %>%
-      dplyr::pull(y_perturbada) %>% do.call("c", .)
-  }
+  # # Se extraen los valores para la variable_x de la copula
+  # variable_x <- eventos.completos %>%
+  #   dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column), 
+  #                 tipo_evento == 'seco', variable == input.value$variable_x,
+  #                 tipo_serie == input.value$tipo_serie, n_serie == input.value$n_serie) %>%
+  #   dplyr::pull(valor) 
+  # 
+  # # Se extraen los valores para la variable_y de la copula
+  # variable_y <- eventos.completos %>%
+  #   dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column), 
+  #                 tipo_evento == 'seco', variable == input.value$variable_y,
+  #                 tipo_serie == input.value$tipo_serie, n_serie == input.value$n_serie) %>%
+  #   dplyr::pull(valor) 
   
   # Aquí se obtiene el mejor ajuste univariado para la variable x
   mejor.ajuste.dsitribucion.x <- mejor.ajuste.univariado %>%
@@ -85,16 +70,20 @@ AplicarMejorAjusteACopulas <- function(input.value, script, copulas.ajustadas,
                   variable == input.value$variable_y) 
   
   # Finalmente, realizar el ajuste multivariado
-  ajuste_multivariado <- mvdc(copula=mejor_copula,
-                              margins=c(mejor.ajuste.dsitribucion.x$distribucion, 
-                                        mejor.ajuste.dsitribucion.y$distribucion),
-                              paramMargins=list(mejor.ajuste.dsitribucion.x$parametros[[1]], 
-                                                mejor.ajuste.dsitribucion.y$parametros[[1]]))
+  if (!is.na(mejor.ajuste.dsitribucion.x$distribucion) & !is.na(mejor.ajuste.dsitribucion.y$distribucion)) {
+    ajuste_multivariado <- copula::mvdc(copula=mejor_copula,
+                                        margins=c(mejor.ajuste.dsitribucion.x$distribucion, 
+                                                  mejor.ajuste.dsitribucion.y$distribucion),
+                                        paramMargins=list(mejor.ajuste.dsitribucion.x$parametros[[1]], 
+                                                          mejor.ajuste.dsitribucion.y$parametros[[1]]))
+  } else {
+    ajuste_multivariado <- NA
+  }
 
   return(input.value %>% 
            dplyr::mutate(parametro_mejor_copula = !!parametro_mejor_copula,
                          mejor_copula = list(mejor_copula),
-                         valores_x = list(!!variable_x), valores_y = list(!!variable_y), 
+                         #valores_x = list(!!variable_x), valores_y = list(!!variable_y), 
                          mejor_ajuste_x_dist = mejor.ajuste.dsitribucion.x$distribucion,
                          mejor_ajuste_x_params = list(mejor.ajuste.dsitribucion.x$parametros[[1]]),
                          mejor_ajuste_y_dist = mejor.ajuste.dsitribucion.y$distribucion,
@@ -199,7 +188,7 @@ MejorAjusteMultivariadoUC <- function(input.value, script, copulas.ajustadas, um
 }
 
 
-AjustarCopulas <- function(input.value, script, umbral.p.valor) {
+AjustarCopulas <- function(input.value, script, eventos.completos, umbral.p.valor) {
   # Obtener la ubicación y las variables de la copula, para cada serie perturbada 
   # (la distribución es única -la que mejor ajustó- para cada par ubicación, variable)
   vcu <- input.value
@@ -209,34 +198,64 @@ AjustarCopulas <- function(input.value, script, umbral.p.valor) {
   
   # Informar estado de la ejecución
   script$info(glue::glue("Ajustando cópula \"{vcu$variable_x}-{vcu$variable_y}\" ", 
-                         "para la ubicación = {vcu %>% dplyr::pull(!!id_column)} ",
-                         "serie_perturbada = {vcu$n_serie_perturbada}, familia = ",
-                         "{vcu$familia}, funcion_ajuste = {vcu$funcion_ajuste} "))
+                         "para la ubicación = {vcu %>% dplyr::pull(!!id_column)} (vcu$nombre) ",
+                         "tipo_serie = {vcu$tipo_serie}, n_serie = {vcu$n_serie}, ",
+                         "familia = {vcu$familia}, funcion_ajuste = {vcu$funcion_ajuste} "))
   
   
-  # CONTROL: salir si las variables en la copula no son dependientes 
+  # -----------------------------------------------------------------------------#
+  # Control INICIAL: salir si las variables en la copula no son dependientes  ----
+  # -----------------------------------------------------------------------------#
+  
   if(! vcu$son_dependientes) 
     return(input.value %>% dplyr::mutate(copula = list(NA), bondad.ajuste = list(NA)))
   
+  # ------------------------------------------------------------------------------
   
-  # Extraer x.prima
-  x.prima <- vcu %>% dplyr::pull(x_perturbada) %>% do.call("c", .)
-  # Extraer y.prima
-  y.prima <- vcu %>% dplyr::pull(y_perturbada) %>% do.call("c", .)
+  
+  # -----------------------------------------------------------------------------#
+  # Paso 0: Determinar valores iniciales ----
+  # -----------------------------------------------------------------------------#
+  
+  eventos.ubic.var <- eventos.completos %>%
+    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
+                  tipo_evento == 'seco', variable == input.value$variable_x | variable == input.value$variable_y, 
+                  tipo_serie == vcu$tipo_serie, n_serie == input.value$n_serie) 
+  
+  x.prima <- eventos.ubic.var %>% dplyr::filter(variable == input.value$variable_x) %>% dplyr::pull(valor)
+  y.prima <- eventos.ubic.var %>% dplyr::filter(variable == input.value$variable_y) %>% dplyr::pull(valor)
   
   # Crear parametros para el ajuste de las copulas
   parametros <- list(x = x.prima, y = y.prima)
   
-  # Ajustar 
-  ajuste.copula <- do.call(what = vcu$funcion_ajuste, 
-                           args = parametros)
+  # ------------------------------------------------------------------------------
+  
+  
+  # -----------------------------------------------------------------------------#
+  # Paso 1: Realizar ajuste multivariado ----
+  # -----------------------------------------------------------------------------#
+  # 
+  ajuste.copula <- do.call(what = vcu$funcion_ajuste, args = parametros)
+  
+  # ------------------------------------------------------------------------------
+  
+  
+  # -----------------------------------------------------------------------------#
+  # Paso 2: Realizar test de bondad del ajuste ----
+  # -----------------------------------------------------------------------------#
   
   # Calcular bondad de ajuste
   bondad.ajuste.copula <- TestearBondadAjusteCopulas(x = parametros$x,
                                                      y = parametros$y,
-                                                     umbral.p.valor = umbral.p.valor, 
+                                                     umbral.p.valor = umbral.p.valor,
                                                      copula = ajuste.copula)
-
+  
+  # ------------------------------------------------------------------------------
+  
+  
+  # -----------------------------------------------------------------------------#
+  # Paso FINAL: Retornar resultados ----
+  # -----------------------------------------------------------------------------#
   
   return (input.value %>% dplyr::mutate(copula = list(ajuste.copula), 
                                         bondad.ajuste = list(bondad.ajuste.copula)))
@@ -244,7 +263,8 @@ AjustarCopulas <- function(input.value, script, umbral.p.valor) {
 }
 
 
-DeterminarDependenciaEntreSeriesPerturbadas <- function(input.value, script, umbral.p.valor) {
+DeterminarDependencia <- function(input.value, script, eventos.completos,
+                                  tests.dependencia, umbral.p.valor) {
   # Obtener la ubicación y las variables de la copula, para cada serie perturbada 
   # (la distribución es única -la que mejor ajustó- para cada par ubicación, variable)
   vcu <- input.value
@@ -253,69 +273,224 @@ DeterminarDependenciaEntreSeriesPerturbadas <- function(input.value, script, umb
   id_column <- IdentificarIdColumn(vcu)
   
   # Informar estado de la ejecución
-  script$info(glue::glue("Determinando dependencia de las series perturbadas que componen la copula ", 
+  script$info(glue::glue("Determinando dependencia de las series {vcu$tipo_serie}s que componen la copula ", 
                          "\"{vcu$variable_x}-{vcu$variable_y}\" para la ubicación = {vcu %>% dplyr::pull(!!id_column)} ",
-                         "y serie_perturbada = {vcu$n_serie_perturbada} "))
-  
-  # Extraer x.prima
-  x.prima <- vcu %>% dplyr::pull(x_perturbada) %>% do.call("c", .)
-  # Extraer y.prima
-  y.prima <- vcu %>% dplyr::pull(y_perturbada) %>% do.call("c", .)
-  
-  # Calcular estacionariedad
-  t0 <- proc.time()
-  resultados.dependencia <- SonDependientes(x.prima, y.prima, umbral.p.valor)
-  t1 <- proc.time() - t0
-  
-  return (input.value %>% dplyr::mutate(son_dependientes = resultados.dependencia$pasa.tests, 
-                                        segundos_calc_dependencia = t1[["elapsed"]]))
-  
-}
-
-
-DeterminarEstacionariedadDeSeriesPerturbadas <- function(input.value, script, umbral.p.valor) {
-   # Identificar la columna con el id de la ubicación (usualmente station_id, o point_id)
-  id_column <- IdentificarIdColumn(input.value)
-  
-  # Informar estado de la ejecución
-  script$info(glue::glue("Determinando estacionariedad de la serie perturbada para la ubicación = {input.value %>% dplyr::pull(!!id_column)}, ",
-                         "variable = \"{input.value$variable}\", distribucion = \"{input.value$distribucion}\", ",
-                         "serie_perturbada = {input.value$n_serie_perturbada} "))
-  
-  # Extraer x.prima
-  x.prima <- input.value %>% dplyr::pull(serie_perturbada) %>% do.call("c", .)
-  fechas  <- input.value %>% dplyr::pull(fechas_serie_perturbada) %>% do.call("c", .)
-  
-  # Calcular estacionariedad
-  t0 <- proc.time()
-  resultados.estacionariedad.x <- EsEstacionaria(x = x.prima, fecha = fechas, umbral.p.valor)
-  t1 <- proc.time() - t0
-  
-  return (input.value %>% dplyr::mutate(es_estacionaria = resultados.estacionariedad.x$pasa.tests, 
-                                        segundos_calc_estacionariedad = t1[["elapsed"]]))
-
-}
-
-
-AplicarMejorAjusteASeriesPerturbadas <- function(input.value, script, eventos.completos) {
-  # Identificar la columna con el id de la ubicación (usualmente station_id, o point_id)
-  id_column <- IdentificarIdColumn(input.value)
-  
-  # Informar estado de la ejecución
-  script$info(glue::glue("Realizando mejor ajuste para la ubicación = {input.value %>% dplyr::pull(!!id_column)}, ",
-                         "variable = \"{input.value$variable}\", distribucion = \"{input.value$distribucion}\", ",
-                         "serie_perturbada = {input.value$n_serie_perturbada} "))
+                         "({vcu$nombre}) y serie_perturbada = {vcu$n_serie} "))
   
   
   # -----------------------------------------------------------------------------#
   # Paso 0: Determinar valores iniciales ----
   # -----------------------------------------------------------------------------#
   
-  eventos.ubicacion <- eventos.completos %>%
-    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column) & tipo_evento == 'seco')
+  eventos.ubic.var <- eventos.completos %>%
+    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
+                  tipo_evento == 'seco', variable == input.value$variable_x | variable == input.value$variable_y, 
+                  tipo_serie == vcu$tipo_serie, n_serie == input.value$n_serie) 
   
-  x <- abs(dplyr::pull(eventos.ubicacion, input.value$variable))
-  fechas <- dplyr::pull(eventos.ubicacion, fecha_inicio)
+  x.prima <- eventos.ubic.var %>% dplyr::filter(variable == input.value$variable_x) %>% dplyr::pull(valor)
+  y.prima <- eventos.ubic.var %>% dplyr::filter(variable == input.value$variable_y) %>% dplyr::pull(valor)
+  
+  # ------------------------------------------------------------------------------
+  
+  
+  # -----------------------------------------------------------------------------#
+  # Paso 1: Calcular dependencia ----
+  # -----------------------------------------------------------------------------#
+  
+  t0 <- proc.time()
+  resultados.dependencia <- SonDependientes(x.prima, y.prima, tests.dependencia, umbral.p.valor)
+  t1 <- proc.time() - t0
+  
+  # ------------------------------------------------------------------------------
+  
+  
+  # -----------------------------------------------------------------------------#
+  # Paso FINAL: Retornar resultados ----
+  # -----------------------------------------------------------------------------#
+  
+  return (input.value %>% dplyr::mutate(son_dependientes = all(resultados.dependencia$pasa.test),
+                                        detalles_dependencia = list(resultados.dependencia),
+                                        segundos_calc_dependencia = t1[["elapsed"]]))
+  
+}
+
+
+DeterminarEstacionariedad <- function(input.value, script, eventos.completos,
+                                      tests.estacionariedad, umbral.p.valor) {
+  # Identificar la columna con el id de la ubicación (usualmente station_id, o point_id)
+  id_column <- IdentificarIdColumn(input.value)
+  
+  # Informar estado de la ejecución
+  script$info(glue::glue("Determinando estacionariedad de la serie {input.value$tipo_serie} número {input.value$n_serie}, ",
+                         "para la ubicación = {input.value %>% dplyr::pull(!!id_column)} ({input.value$nombre}), ",
+                         "variable = \"{input.value$variable}\", realización = {input.value$realizacion}."))
+  
+  
+  # -----------------------------------------------------------------------------#
+  # Paso 0: Determinar valores iniciales ----
+  # -----------------------------------------------------------------------------#
+  
+  eventos.ubic.var <- eventos.completos %>%
+    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
+                  tipo_evento == 'seco', variable == input.value$variable, 
+                  tipo_serie == input.value$tipo_serie, n_serie == input.value$n_serie,
+                  realizacion == input.value$realizacion) 
+  
+  x.prima <- dplyr::pull(eventos.ubic.var, valor)
+  fechas <- dplyr::pull(eventos.ubic.var, fecha_inicio)
+  
+  # ------------------------------------------------------------------------------
+  
+  
+  # -----------------------------------------------------------------------------#
+  # Paso 1: Calcular estacionariedad ----
+  # -----------------------------------------------------------------------------#
+  
+  t0 <- proc.time()
+  resultados.estacionariedad.x <- EsEstacionaria(x.prima, fechas, tests.estacionariedad, umbral.p.valor)
+  t1 <- proc.time() - t0
+  
+  # ------------------------------------------------------------------------------
+  
+  
+  # -----------------------------------------------------------------------------#
+  # Paso FINAL: Retornar resultados ----
+  # -----------------------------------------------------------------------------#
+  
+  return (input.value %>% dplyr::mutate(es_estacionaria = all(resultados.estacionariedad.x$pasa.test),
+                                        detalles_estacionariedad = list(resultados.estacionariedad.x),
+                                        segundos_calc_estacionariedad = t1[["elapsed"]]))
+  
+}
+
+
+DeterminarEstacionariedadDeSeriesObservadas <- function(input.value, script, serie.observada, 
+                                                        tests.estacionariedad, umbral.p.valor) {
+  # Identificar la columna con el id de la ubicación (usualmente station_id, o point_id)
+  id_column <- IdentificarIdColumn(input.value)
+  
+  # Informar estado de la ejecución
+  script$info(glue::glue("Determinando estacionariedad de la serie observada para la ",
+                         "ubicación = {input.value %>% dplyr::pull(!!id_column)} ({input.value$nombre}), ",
+                         "variable = \"{input.value$variable}\", realización = {input.value$realizacion}."))
+  
+  
+  # -----------------------------------------------------------------------------#
+  # Paso 0: Determinar valores iniciales ----
+  # -----------------------------------------------------------------------------#
+  
+  serie.observada.ubic.var <- serie.observada %>%
+    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
+                  tipo_evento == 'seco', variable == input.value$variable, 
+                  tipo_serie == "observada", n_serie == input.value$n_serie,
+                  realizacion == input.value$realizacion) 
+  
+  x.prima <- dplyr::pull(serie.observada.ubic.var, valor)
+  fechas <- dplyr::pull(serie.observada.ubic.var, fecha_inicio)
+  
+  # ------------------------------------------------------------------------------
+  
+  
+  # -----------------------------------------------------------------------------#
+  # Paso 1: Calcular estacionariedad ----
+  # -----------------------------------------------------------------------------#
+  
+  t0 <- proc.time()
+  resultados.estacionariedad.x <- EsEstacionaria(x.prima, fechas, tests.estacionariedad, umbral.p.valor)
+  t1 <- proc.time() - t0
+  
+  # ------------------------------------------------------------------------------
+  
+  
+  # -----------------------------------------------------------------------------#
+  # Paso FINAL: Retornar resultados ----
+  # -----------------------------------------------------------------------------#
+  
+  return (input.value %>% dplyr::mutate(es_estacionaria = all(resultados.estacionariedad.x$pasa.test),
+                                        detalles_estacionariedad = list(resultados.estacionariedad.x),
+                                        segundos_calc_estacionariedad = t1[["elapsed"]]))
+  
+}
+
+
+DeterminarEstacionariedadDeSeriesPerturbadas <- function(input.value, script, series.perturbadas, 
+                                                         tests.estacionariedad, umbral.p.valor, 
+                                                         estacionariedad.serie.observada = NULL) {
+   # Identificar la columna con el id de la ubicación (usualmente station_id, o point_id)
+  id_column <- IdentificarIdColumn(input.value)
+  
+  # Informar estado de la ejecución
+  script$info(glue::glue("Determinando estacionariedad de la serie perturbada \"{input.value$n_serie}\" ", 
+                         "para la ubicación = {input.value %>% dplyr::pull(!!id_column)} ({input.value$nombre}) y ",
+                         "variable = \"{input.value$variable}\", realización = {input.value$realizacion}."))
+  
+  
+  # -----------------------------------------------------------------------------#
+  # Paso 0: Determinar valores iniciales ----
+  # -----------------------------------------------------------------------------#
+  
+  series.perturbadas.ubic.var <- series.perturbadas %>%
+    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
+                  tipo_evento == 'seco', variable == input.value$variable, 
+                  tipo_serie == "perturbada", n_serie == input.value$n_serie,
+                  realizacion == input.value$realizacion)
+  
+  x.prima <- dplyr::pull(series.perturbadas.ubic.var, valor)
+  fechas <- dplyr::pull(series.perturbadas.ubic.var, fecha_inicio)
+  
+  # ------------------------------------------------------------------------------
+  
+  
+  # -----------------------------------------------------------------------------#
+  # Paso 1: Calcular estacionariedad ----
+  # -----------------------------------------------------------------------------#
+  
+  t0 <- proc.time()
+  if (is.null(estacionariedad.serie.observada)) {
+    resultados.estacionariedad.x <- EsEstacionaria(x.prima, fechas, tests.estacionariedad, umbral.p.valor) 
+  } else {
+    resultados.estacionariedad.x <- estacionariedad.serie.observada %>% 
+      dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column), 
+                    variable == input.value$variable, realizacion == input.value$realizacion) %>%
+      dplyr::pull(detalles_estacionariedad) %>% dplyr::first()
+  }
+  t1 <- proc.time() - t0
+  
+  # ------------------------------------------------------------------------------
+  
+  
+  # -----------------------------------------------------------------------------#
+  # Paso FINAL: Retornar resultados ----
+  # -----------------------------------------------------------------------------#
+  
+  return (input.value %>% dplyr::mutate(es_estacionaria = all(resultados.estacionariedad.x$pasa.test),
+                                        detalles_estacionariedad = list(resultados.estacionariedad.x),
+                                        segundos_calc_estacionariedad = t1[["elapsed"]]))
+
+}
+
+
+AplicarMejorAjusteASeriesPerturbadas <- function(input.value, script, series.perturbadas) {
+  # Identificar la columna con el id de la ubicación (usualmente station_id, o point_id)
+  id_column <- IdentificarIdColumn(input.value)
+  
+  # Informar estado de la ejecución
+  script$info(glue::glue("Realizando mejor ajuste para la ubicación = {input.value %>% dplyr::pull(!!id_column)}, ",
+                         "variable = \"{input.value$variable}\", distribucion = \"{input.value$distribucion}\", ",
+                         "tipo_serie = \"{input.value$tipo_serie}\", n_serie = {input.value$n_serie} "))
+  
+  
+  # -----------------------------------------------------------------------------#
+  # Paso 0: Determinar valores iniciales ----
+  # -----------------------------------------------------------------------------#
+  
+  series.perturbadas.ubic.var <- series.perturbadas %>%
+    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
+                  tipo_evento == 'seco', variable == input.value$variable, 
+                  tipo_serie == "perturbada", n_serie == input.value$n_serie) 
+  
+  x.prima <- dplyr::pull(series.perturbadas.ubic.var, valor)
+  fechas <- dplyr::pull(series.perturbadas.ubic.var, fecha_inicio)
   
   # ------------------------------------------------------------------------------
   
@@ -324,11 +499,10 @@ AplicarMejorAjusteASeriesPerturbadas <- function(input.value, script, eventos.co
   # Paso 1: Aplicar mejor ajuste univariado ----
   # -----------------------------------------------------------------------------#
   
-  # Crear variable con ruido
-  x.prima <- AgregarRuido(x, input.value$valor_minimo_deteccion)
-  
   # Ajustar distribucion univariada utilizando el mejor ajuste
-  if (input.value$mejor_ajuste == 'lmomentos') {
+  if (is.na(input.value$mejor_ajuste)) {
+    ajuste <- list(parametros = NA)
+  } else if (input.value$mejor_ajuste == 'lmomentos') {
     # Ajuste por L-momentos
     ajuste <- do.call(what = input.value$funcion_mejor_ajuste, 
                       args = list(x.prima, min.cantidad.valores = 50))
@@ -346,17 +520,15 @@ AplicarMejorAjusteASeriesPerturbadas <- function(input.value, script, eventos.co
   # Paso FINAL: Retornar resultados ----
   # -----------------------------------------------------------------------------#
   
-  resultado <- input.value %>% 
-    dplyr::select(-valor_minimo_deteccion) %>%
-    dplyr::mutate(serie_perturbada = list(x.prima), fechas_serie_perturbada = list(fechas),
-                  parametros_ajuste_serie_perturbada = list(ajuste$parametros))
+  resultado <- input.value %>% dplyr::select(-valor_minimo_deteccion) %>%
+    dplyr::mutate(parametros_ajuste_serie_perturbada = list(ajuste$parametros))
   
   return (resultado)
   
 }
 
 
-MejorAjusteUnivariadoUV <- function(input.value, script, ajustes_univariados) {
+MejorAjusteUnivariadoUV <- function(input.value, script, ajustes.univariados) {
   # Obtener la ubicación y variable a analizar (ojo, no cópula, sino variable)
   uv <- input.value
   
@@ -367,34 +539,14 @@ MejorAjusteUnivariadoUV <- function(input.value, script, ajustes_univariados) {
   script$info(glue::glue("Determinando mejor ajuste para la ubicación {uv %>% dplyr::pull(!!id_column)} ",
                          "y la variable \"{uv$variable}\""))
   
-  
-  # -----------------------------------------------------------------------------#
-  # CONTROL: salir si uv$variables no existe en ajustes_univariados ----
-  # -----------------------------------------------------------------------------#
-  
-  if(! uv$variable %in% ajustes_univariados$variable) {
-    type_of_id_col <- typeof(dplyr::pull(uv,!!id_column))
-    return (tibble::tibble(!!id_column := if(type_of_id_col == "integer") integer() else 
-                                          if(type_of_id_col == "numeric") double() else 
-                                          if(type_of_id_col == "logical") logical() else 
-                                          if(type_of_id_col == "character") character() else
-                                            character(),
-      variable = character(), distribucion = character(),
-      mejor_ajuste = character(), parametros = list(),
-      rmse = double(), ccc = double(), cuantiles = double()))
-  }
-  
-  # ------------------------------------------------------------------------------
-  
-  
   # -----------------------------------------------------------------------------#
   # Paso 0: Determinar valores iniciales ----
   # -----------------------------------------------------------------------------#
   
-  ajustes <- ajustes_univariados %>% 
+  ajustes <- ajustes.univariados %>% 
     dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(uv, !!id_column), 
                   variable == uv$variable) %>%
-    dplyr::select(-tidyselect::matches(id_column), -variable) %>%
+    dplyr::select(distribucion, lmomentos, maxima.verosimilitud) %>%
     purrr::pmap(.f = function(...) { return (list(...)) })
   
   # ------------------------------------------------------------------------------
@@ -412,18 +564,16 @@ MejorAjusteUnivariadoUV <- function(input.value, script, ajustes_univariados) {
   # -----------------------------------------------------------------------------#
   # Paso FINAL: Retornar resultados ----
   # -----------------------------------------------------------------------------#
-  return (tibble::tibble(!!id_column := dplyr::pull(uv, !!id_column),
-                         variable = dplyr::pull(uv, variable), 
-                         distribucion = mejor.ajuste$distribucion,
-                         mejor_ajuste = mejor.ajuste$metodo_ajuste,
-                         parametros = list(mejor.ajuste$parametros),
-                         rmse = mejor.ajuste$rmse,
-                         ccc = mejor.ajuste$ccc,
-                         cuantiles = mejor.ajuste$cuantiles))
+  return (uv %>% dplyr::mutate(distribucion = mejor.ajuste$distribucion,
+                               mejor_ajuste = mejor.ajuste$metodo_ajuste,
+                               parametros = list(mejor.ajuste$parametros),
+                               rmse = mejor.ajuste$rmse,
+                               ccc = mejor.ajuste$ccc,
+                               cuantiles = mejor.ajuste$cuantiles))
 }
 
 
-AjusteUnivariadoUVD <- function(input.value, script, config, eventos.completos) {
+AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.valor) {
   # Ubicación, variable y distribución 
   uvd <- input.value
   
@@ -439,11 +589,12 @@ AjusteUnivariadoUVD <- function(input.value, script, config, eventos.completos) 
   # Paso 0: Determinar valores iniciales ----
   # -----------------------------------------------------------------------------#
   
-  eventos.ubicacion <- eventos.completos %>%
-    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(uvd, !!id_column) & tipo_evento == 'seco')
+  serie.observada.ubic.var <- serie.observada %>%
+    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(uvd, !!id_column),
+                  tipo_evento == 'seco', variable == uvd$variable, tipo_serie == "observada") 
   
-  x <- abs(dplyr::pull(eventos.ubicacion, uvd$variable))
-  fechas <- dplyr::pull(eventos.ubicacion, fecha_inicio)
+  x <- dplyr::pull(serie.observada.ubic.var, valor)
+  fechas <- dplyr::pull(serie.observada.ubic.var, fecha_inicio)
   
   # ------------------------------------------------------------------------------
   
@@ -459,7 +610,7 @@ AjusteUnivariadoUVD <- function(input.value, script, config, eventos.completos) 
   parametros.maxima.verosimilitud <- list(x = x, min.cantidad.valores = 50, numero.muestras = NULL)
   
   ajuste.univariado <- AjusteUnivariadoConfig(x = x,
-                                              umbral.p.valor = config$params$umbral.p.valor,
+                                              umbral.p.valor = umbral.p.valor,
                                               configuracion, parametros.lmomentos,
                                               parametros.maxima.verosimilitud)
   
@@ -469,9 +620,6 @@ AjusteUnivariadoUVD <- function(input.value, script, config, eventos.completos) 
   # -----------------------------------------------------------------------------#
   # Paso FINAL: Retornar resultados ----
   # -----------------------------------------------------------------------------#
-  return (tibble::tibble(!!id_column := dplyr::pull(uvd, !!id_column),
-                         variable = dplyr::pull(uvd, variable),
-                         distribucion = ajuste.univariado$distribucion,
-                         lmomentos = list(ajuste.univariado$lmomentos),
-                         maxima.verosimilitud = list(ajuste.univariado$maxima.verosimilitud)))
+  return (uvd %>% dplyr::mutate(lmomentos = list(ajuste.univariado$lmomentos),
+                                maxima.verosimilitud = list(ajuste.univariado$maxima.verosimilitud)))
 }
