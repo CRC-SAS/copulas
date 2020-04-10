@@ -38,12 +38,6 @@ copulas:
   # Archivo con el resultado se aplicar el mejor ajuste univariado a cada una de las series perturbadas.
   series_perturbadas_ajustadas: "output/series_perturbadas_ajustadas_<*idc>.rds"
   
-  # Archivo con la estacionariedad de las series observadas
-  estacionariedad_series_observadas: "partial/estacionariedad_series_observadas_<*idc>.rds"
-  
-  # Archivo con la estacionariedad de las series perturbadas
-  estacionariedad_series_perturbadas: "partial/estacionariedad_series_perturbadas_<*idc>.rds"
-  
   # Archivo con la estacionariedad de las series observadas y perturbadas
   estacionariedad: "partial/estacionariedad_<*idc>.rds"
   

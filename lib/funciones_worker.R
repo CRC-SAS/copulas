@@ -45,20 +45,6 @@ AplicarMejorAjusteACopulas <- function(input.value, script, copulas.ajustadas,
   mejor_copula <- do.call(what = paste0(mejor_familia, "Copula"), 
                           args = list(param = parametro_mejor_copula, dim = 2))
   
-  # # Se extraen los valores para la variable_x de la copula
-  # variable_x <- eventos.completos %>%
-  #   dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column), 
-  #                 tipo_evento == 'seco', variable == input.value$variable_x,
-  #                 tipo_serie == input.value$tipo_serie, n_serie == input.value$n_serie) %>%
-  #   dplyr::pull(valor) 
-  # 
-  # # Se extraen los valores para la variable_y de la copula
-  # variable_y <- eventos.completos %>%
-  #   dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column), 
-  #                 tipo_evento == 'seco', variable == input.value$variable_y,
-  #                 tipo_serie == input.value$tipo_serie, n_serie == input.value$n_serie) %>%
-  #   dplyr::pull(valor) 
-  
   # Aquí se obtiene el mejor ajuste univariado para la variable x
   mejor.ajuste.dsitribucion.x <- mejor.ajuste.univariado %>%
     dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column), 
@@ -83,7 +69,6 @@ AplicarMejorAjusteACopulas <- function(input.value, script, copulas.ajustadas,
   return(input.value %>% 
            dplyr::mutate(parametro_mejor_copula = !!parametro_mejor_copula,
                          mejor_copula = list(mejor_copula),
-                         #valores_x = list(!!variable_x), valores_y = list(!!variable_y), 
                          mejor_ajuste_x_dist = mejor.ajuste.dsitribucion.x$distribucion,
                          mejor_ajuste_x_params = list(mejor.ajuste.dsitribucion.x$parametros[[1]]),
                          mejor_ajuste_y_dist = mejor.ajuste.dsitribucion.y$distribucion,
@@ -361,112 +346,6 @@ DeterminarEstacionariedad <- function(input.value, script, eventos.completos,
                                         detalles_estacionariedad = list(resultados.estacionariedad.x),
                                         segundos_calc_estacionariedad = t1[["elapsed"]]))
   
-}
-
-
-DeterminarEstacionariedadDeSeriesObservadas <- function(input.value, script, serie.observada, 
-                                                        tests.estacionariedad, umbral.p.valor) {
-  # Identificar la columna con el id de la ubicación (usualmente station_id, o point_id)
-  id_column <- IdentificarIdColumn(input.value)
-  
-  # Informar estado de la ejecución
-  script$info(glue::glue("Determinando estacionariedad de la serie observada para la ",
-                         "ubicación = {input.value %>% dplyr::pull(!!id_column)} ({input.value$nombre}), ",
-                         "variable = \"{input.value$variable}\", realización = {input.value$realizacion}."))
-  
-  
-  # -----------------------------------------------------------------------------#
-  # Paso 0: Determinar valores iniciales ----
-  # -----------------------------------------------------------------------------#
-  
-  serie.observada.ubic.var <- serie.observada %>%
-    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
-                  tipo_evento == 'seco', variable == input.value$variable, 
-                  tipo_serie == "observada", n_serie == input.value$n_serie,
-                  realizacion == input.value$realizacion) 
-  
-  x.prima <- dplyr::pull(serie.observada.ubic.var, valor)
-  fechas <- dplyr::pull(serie.observada.ubic.var, fecha_inicio)
-  
-  # ------------------------------------------------------------------------------
-  
-  
-  # -----------------------------------------------------------------------------#
-  # Paso 1: Calcular estacionariedad ----
-  # -----------------------------------------------------------------------------#
-  
-  t0 <- proc.time()
-  resultados.estacionariedad.x <- EsEstacionaria(x.prima, fechas, tests.estacionariedad, umbral.p.valor)
-  t1 <- proc.time() - t0
-  
-  # ------------------------------------------------------------------------------
-  
-  
-  # -----------------------------------------------------------------------------#
-  # Paso FINAL: Retornar resultados ----
-  # -----------------------------------------------------------------------------#
-  
-  return (input.value %>% dplyr::mutate(es_estacionaria = all(resultados.estacionariedad.x$pasa.test),
-                                        detalles_estacionariedad = list(resultados.estacionariedad.x),
-                                        segundos_calc_estacionariedad = t1[["elapsed"]]))
-  
-}
-
-
-DeterminarEstacionariedadDeSeriesPerturbadas <- function(input.value, script, series.perturbadas, 
-                                                         tests.estacionariedad, umbral.p.valor, 
-                                                         estacionariedad.serie.observada = NULL) {
-   # Identificar la columna con el id de la ubicación (usualmente station_id, o point_id)
-  id_column <- IdentificarIdColumn(input.value)
-  
-  # Informar estado de la ejecución
-  script$info(glue::glue("Determinando estacionariedad de la serie perturbada \"{input.value$n_serie}\" ", 
-                         "para la ubicación = {input.value %>% dplyr::pull(!!id_column)} ({input.value$nombre}) y ",
-                         "variable = \"{input.value$variable}\", realización = {input.value$realizacion}."))
-  
-  
-  # -----------------------------------------------------------------------------#
-  # Paso 0: Determinar valores iniciales ----
-  # -----------------------------------------------------------------------------#
-  
-  series.perturbadas.ubic.var <- series.perturbadas %>%
-    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
-                  tipo_evento == 'seco', variable == input.value$variable, 
-                  tipo_serie == "perturbada", n_serie == input.value$n_serie,
-                  realizacion == input.value$realizacion)
-  
-  x.prima <- dplyr::pull(series.perturbadas.ubic.var, valor)
-  fechas <- dplyr::pull(series.perturbadas.ubic.var, fecha_inicio)
-  
-  # ------------------------------------------------------------------------------
-  
-  
-  # -----------------------------------------------------------------------------#
-  # Paso 1: Calcular estacionariedad ----
-  # -----------------------------------------------------------------------------#
-  
-  t0 <- proc.time()
-  if (is.null(estacionariedad.serie.observada)) {
-    resultados.estacionariedad.x <- EsEstacionaria(x.prima, fechas, tests.estacionariedad, umbral.p.valor) 
-  } else {
-    resultados.estacionariedad.x <- estacionariedad.serie.observada %>% 
-      dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column), 
-                    variable == input.value$variable, realizacion == input.value$realizacion) %>%
-      dplyr::pull(detalles_estacionariedad) %>% dplyr::first()
-  }
-  t1 <- proc.time() - t0
-  
-  # ------------------------------------------------------------------------------
-  
-  
-  # -----------------------------------------------------------------------------#
-  # Paso FINAL: Retornar resultados ----
-  # -----------------------------------------------------------------------------#
-  
-  return (input.value %>% dplyr::mutate(es_estacionaria = all(resultados.estacionariedad.x$pasa.test),
-                                        detalles_estacionariedad = list(resultados.estacionariedad.x),
-                                        segundos_calc_estacionariedad = t1[["elapsed"]]))
-
 }
 
 
