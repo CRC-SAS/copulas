@@ -176,7 +176,9 @@ if (nrow(configuraciones_eventos) > 1)
 # Obtener los eventos a ser analizados!
 eventos <- feather::read_feather(glue::glue("{config$dir$data}/{config$files$eventos_identificados}")) %>%
   dplyr::filter(conf_id %in% configuraciones_eventos$conf_id) %>% 
-  dplyr::filter(realizacion <= config$params$n.realizaciones) 
+  dplyr::filter(realizacion <= config$params$n.realizaciones) %>%
+  dplyr::filter(tipo_evento == config$params$eventos$tipo, 
+                duracion >= config$params$eventos$duracion_minima)
 id_column <- IdentificarIdColumn(eventos)
 # Controlar que eventos tenga un id identificable
 if (! any(c("station_id", "point_id") %in% colnames(eventos)))

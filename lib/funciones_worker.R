@@ -183,7 +183,7 @@ AjustarCopulas <- function(input.value, script, eventos.completos, umbral.p.valo
   
   # Informar estado de la ejecución
   script$info(glue::glue("Ajustando cópula \"{vcu$variable_x}-{vcu$variable_y}\" ", 
-                         "para la ubicación = {vcu %>% dplyr::pull(!!id_column)} (vcu$nombre) ",
+                         "para la ubicación = {vcu %>% dplyr::pull(!!id_column)} ({vcu$nombre}) ",
                          "tipo_serie = {vcu$tipo_serie}, n_serie = {vcu$n_serie}, ",
                          "familia = {vcu$familia}, funcion_ajuste = {vcu$funcion_ajuste} "))
   
@@ -204,7 +204,7 @@ AjustarCopulas <- function(input.value, script, eventos.completos, umbral.p.valo
   
   eventos.ubic.var <- eventos.completos %>%
     dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
-                  tipo_evento == 'seco', variable == input.value$variable_x | variable == input.value$variable_y, 
+                  variable == input.value$variable_x | variable == input.value$variable_y, 
                   tipo_serie == vcu$tipo_serie, n_serie == input.value$n_serie) 
   
   x.prima <- eventos.ubic.var %>% dplyr::filter(variable == input.value$variable_x) %>% dplyr::pull(valor)
@@ -269,7 +269,7 @@ DeterminarDependencia <- function(input.value, script, eventos.completos,
   
   eventos.ubic.var <- eventos.completos %>%
     dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
-                  tipo_evento == 'seco', variable == input.value$variable_x | variable == input.value$variable_y, 
+                  variable == input.value$variable_x | variable == input.value$variable_y, 
                   tipo_serie == vcu$tipo_serie, n_serie == input.value$n_serie) 
   
   x.prima <- eventos.ubic.var %>% dplyr::filter(variable == input.value$variable_x) %>% dplyr::pull(valor)
@@ -317,9 +317,8 @@ DeterminarEstacionariedad <- function(input.value, script, eventos.completos,
   
   eventos.ubic.var <- eventos.completos %>%
     dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
-                  tipo_evento == 'seco', variable == input.value$variable, 
-                  tipo_serie == input.value$tipo_serie, n_serie == input.value$n_serie,
-                  realizacion == input.value$realizacion) 
+                  variable == input.value$variable, tipo_serie == input.value$tipo_serie, 
+                  n_serie == input.value$n_serie, realizacion == input.value$realizacion) 
   
   x.prima <- dplyr::pull(eventos.ubic.var, valor)
   fechas <- dplyr::pull(eventos.ubic.var, fecha_inicio)
@@ -365,8 +364,8 @@ AplicarMejorAjusteASeriesPerturbadas <- function(input.value, script, series.per
   
   series.perturbadas.ubic.var <- series.perturbadas %>%
     dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
-                  tipo_evento == 'seco', variable == input.value$variable, 
-                  tipo_serie == "perturbada", n_serie == input.value$n_serie) 
+                  variable == input.value$variable, tipo_serie == "perturbada", 
+                  n_serie == input.value$n_serie) 
   
   x.prima <- dplyr::pull(series.perturbadas.ubic.var, valor)
   fechas <- dplyr::pull(series.perturbadas.ubic.var, fecha_inicio)
@@ -470,7 +469,7 @@ AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.v
   
   serie.observada.ubic.var <- serie.observada %>%
     dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(uvd, !!id_column),
-                  tipo_evento == 'seco', variable == uvd$variable, tipo_serie == "observada") 
+                  variable == uvd$variable, tipo_serie == "observada") 
   
   x <- dplyr::pull(serie.observada.ubic.var, valor)
   fechas <- dplyr::pull(serie.observada.ubic.var, fecha_inicio)
