@@ -27,6 +27,10 @@ copulas:
   # series perturbadas. Los valores no son los originales, sino sus valores absolutos.
   eventos_completos: "partial/eventos_completos_<*idc>.feather"
 
+  # Archivo largo con todos los eventos utilizados para el ajuste univariado. 
+  # A duración y mínimo se le agrega algo de ruido para que ajusten mejor!!
+  eventos_ajuste_univariado: "partial/eventos_ajuste_univariado_<*idc>.feather"
+
   # Archivo con los ajustes univariados para las variables que conforman las copulas.
   # Contiene el resultado de ajustar las series observadas utilizando todas las distribuciones.
   ajustes_univariados: "output/ajustes_univariados_<*idc>.rds"

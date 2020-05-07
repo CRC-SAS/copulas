@@ -218,8 +218,8 @@ if (!all(union(variables_copulas$variable_x, variables_copulas$variable_y) %in% 
   stop("No hay datos, en eventos, para todas las variables en valores_minimos en parametros_copulas.yml")
 
 # A partir de los eventos y variables_copulas se genera eventos_completos. Este tibble, a diferencia 
-# de eventos, tiene el valor absoluto de las variables y , además, todas las series perturbadas a ser  
-# utilizadas en los análisis, de manera a optimizar el uso de memoria para grandes cantidades de eventos. 
+# de eventos, tiene el valor absoluto de las variables y, además, todas las series perturbadas a ser  
+# utilizadas en los análisis. Lo que permite optimizar el uso de memoria. 
 serie_observada <- eventos %>%
   dplyr::mutate(intensidad = abs(intensidad), magnitud = abs(magnitud),
                 duracion = abs(duracion), minimo = abs(minimo), maximo = abs(maximo)) %>%
@@ -230,10 +230,11 @@ serie_observada <- eventos %>%
   dplyr::mutate(tipo_serie = "observada", n_serie = 0) %>% 
   dplyr::arrange(variable) 
 
-# OBS: para el cálculo de las series perturbadas se utiliza la semilla definida en el 
-# archivo de configuración de parámetros.
+# OBS: para el cálculo de las series (tanto las perturbadas como la utilizada para el ajsute univariado) 
+# se utiliza la semilla definida en el archivo de configuración de parámetros.
 set.seed(config$params$s.series.perturbadas)
 
+# Se generan las series perturbadas utilizando la función AgregarRuido
 series_perturbadas <- purrr::map_dfr(
   .x = 1:config$params$n.series.perturbadas,
   .f = function(n_serie_perturbada, valores_minimos, serie_observada) {
@@ -247,6 +248,16 @@ series_perturbadas <- purrr::map_dfr(
     return(serie_perturbada)
   }, valores_minimos, serie_observada)
 
+# Debido a problemas al ajustar la duración y el mínmo (columnas en el tibble eventos), es
+# necesario agregar algo de ruido a estas variables con jitter antes del ajuste univariado.  
+# OBS: Este ruido no puede agregarse antes de la generación de las series perturbadas!!
+serie_observada_ajuste_univariado <- serie_observada %>%
+  dplyr::mutate(valor = dplyr::case_when(
+    variable == 'duracion' ~ jitter(valor, 2),
+    variable == 'minimo' ~ jitter(valor),
+    TRUE ~ valor
+  ))
+
 # Finalmente, se crea el tibble eventos_completos!!
 eventos_completos <- dplyr::bind_rows(serie_observada, series_perturbadas)
 
@@ -256,7 +267,14 @@ if (file.exists(eventos_filename))
   file.remove(eventos_filename)
 feather::write_feather(eventos_completos, eventos_filename)
 
-# Se guarda la semilla, para poder generar las mismas series perturbadas posteriormente
+# Se guarda una copia de los eventos utilizados para el ajuste univariado!
+eventos_ajuste_univariado <- glue::glue("{config$dir$data}/{config$files$copulas$eventos_ajuste_univariado}")
+if (file.exists(eventos_ajuste_univariado))
+  file.remove(eventos_ajuste_univariado)
+feather::write_feather(serie_observada_ajuste_univariado, eventos_ajuste_univariado)
+
+# Se guarda la semilla, para poder generar las mismas series posteriormente 
+# (tanto las perturbadas como la utilizada para el ajuste univariado)
 seed_filename <- glue::glue("{config$dir$data}/{config$files$copulas$semilla_utilizada}")
 if (file.exists(seed_filename))
   file.remove(seed_filename)
@@ -310,7 +328,7 @@ script$info("Computando ajuste univariado para cada combinación de ubicación, 
 # Ejecutar tarea distribuida
 ajuste.univariado.x.ubic.var.dist <- task$run(number.of.processes = config$max.procesos,
                                               input.values = ubicacion_x_variable_x_distribucion,  
-                                              serie.observada = serie_observada,
+                                              serie.observada = serie_observada_ajuste_univariado,
                                               umbral.p.valor = config$params$umbral.p.valor)
 
 # Transformar resultados a un objeto de tipo tibble
