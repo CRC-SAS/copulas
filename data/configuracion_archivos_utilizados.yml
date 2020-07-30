@@ -11,7 +11,7 @@ identificador_corrida: &idc "id1"
 # ----------------------------------------------------------------------------
 # Archivo con los eventos a ser procesados
 # ----------------------------------------------------------------------------
-eventos_identificados: "input/eventos_identificados_unconditional.feather"
+eventos_identificados: "input/eventos_identificados_unconditional.csv"
 # ----------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------
@@ -21,41 +21,52 @@ copulas:
 
   # Archivo en el que se guarda la semilla que fue utilizada para la generación 
   # de las series perturbadas!
+  # FMT, es un objeto complejo, NO pude ser guardado en formato CSV.
   semilla_utilizada: "partial/semilla_utilizada_<*idc>.rds"
 
   # Archivo largo con todos los eventos. Contiene tanto las series observadas como las
   # series perturbadas. Los valores no son los originales, sino sus valores absolutos.
-  eventos_completos: "partial/eventos_completos_<*idc>.feather"
+  # FMT, es un objeto simple, SÍ pude ser guardado en formato CSV. 
+  eventos_completos: "partial/eventos_completos_<*idc>.rds"
 
   # Archivo largo con todos los eventos utilizados para el ajuste univariado. 
   # A duración y mínimo se le agrega algo de ruido para que ajusten mejor!!
-  eventos_ajuste_univariado: "partial/eventos_ajuste_univariado_<*idc>.feather"
+  # FMT, es un objeto simple, SÍ pude ser guardado en formato CSV. 
+  eventos_ajuste_univariado: "partial/eventos_ajuste_univariado_<*idc>.rds"
 
   # Archivo con los ajustes univariados para las variables que conforman las copulas.
   # Contiene el resultado de ajustar las series observadas utilizando todas las distribuciones.
+  # FMT, es un objeto complejo, NO pude ser guardado en formato CSV. 
   ajustes_univariados: "output/ajustes_univariados_<*idc>.rds"
 
   # Archivo con los mejores ajustes univariados para las variables que conforman las copulas.
   # Indica el mejor ajuste univariado para cada una de las variables en las copulas.
+  # FMT, es un objeto complejo, NO pude ser guardado en formato CSV. 
   mejores_ajustes_univariados: "output/mejores_ajustes_univariados_<*idc>.rds"
 
   # Archivo con el resultado se aplicar el mejor ajuste univariado a cada una de las series perturbadas.
+  # FMT, es un objeto complejo, NO pude ser guardado en formato CSV. 
   series_perturbadas_ajustadas: "output/series_perturbadas_ajustadas_<*idc>.rds"
   
   # Archivo con la estacionariedad de las series observadas y perturbadas
+  # FMT, es un objeto complejo, NO pude ser guardado en formato CSV. 
   estacionariedad: "partial/estacionariedad_<*idc>.rds"
   
   # Archivo con la dependencia entre variables en las series observadas y perturbadas
+  # FMT, es un objeto complejo, NO pude ser guardado en formato CSV. 
   dependencia: "partial/dependencia_<*idc>.rds"
 
   # Archivo con los ajustes multivariados para cada una de las copulas.
+  # FMT, es un objeto complejo, NO pude ser guardado en formato CSV. 
   ajustes_multivariados: "output/ajustes_multivariados_<*idc>.rds"
 
   # Archivo con los mejores ajustes multivariados para las variables que conforman las copulas.
   # Indica el mejor ajuste multivariado para cada una de las copulas.
+  # FMT, es un objeto simple, SÍ pude ser guardado en formato CSV. 
   mejores_ajustes_multivariados: "output/mejores_ajustes_multivariados_<*idc>.rds"
 
-  # Archivo con los resultados del análisis
+  # Archivo con los resultados del análisis.
+  # FMT, es un objeto complejo, NO pude ser guardado en formato CSV. 
   resultado_final: "output/copulas_<*idc>.rds"
   
   # Archivo con información sobre la corrida

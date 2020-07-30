@@ -174,11 +174,16 @@ if (nrow(configuraciones_eventos) > 1)
   stop("Aún no se implementó la funcionalidad que permite procesar varias configuraciones en paralelo.")
 
 # Obtener los eventos a ser analizados!
-eventos <- feather::read_feather(glue::glue("{config$dir$data}/{config$files$eventos_identificados}")) %>%
+eventos <- data.table::fread(glue::glue("{config$dir$data}/{config$files$eventos_identificados}")) %>%
   dplyr::filter(conf_id %in% configuraciones_eventos$conf_id) %>% 
   dplyr::filter(realizacion <= config$params$n.realizaciones) %>%
   dplyr::filter(tipo_evento == config$params$eventos$tipo, 
-                duracion >= config$params$eventos$duracion_minima)
+                duracion >= config$params$eventos$duracion_minima) %>%
+  dplyr::as_tibble() %>%
+  dplyr::mutate(fecha_inicio = as.Date(fecha_inicio),
+                fecha_fin = as.Date(fecha_fin),
+                referencia_comienzo = as.Date(referencia_comienzo),
+                referencia_fin = as.Date(referencia_fin))
 id_column <- IdentificarIdColumn(eventos)
 # Controlar que eventos tenga un id identificable
 if (! any(c("station_id", "point_id") %in% colnames(eventos)))
@@ -265,20 +270,20 @@ eventos_completos <- dplyr::bind_rows(serie_observada, series_perturbadas)
 eventos_filename <- glue::glue("{config$dir$data}/{config$files$copulas$eventos_completos}")
 if (file.exists(eventos_filename))
   file.remove(eventos_filename)
-feather::write_feather(eventos_completos, eventos_filename)
+base::saveRDS(eventos_completos, eventos_filename)
 
 # Se guarda una copia de los eventos utilizados para el ajuste univariado!
 eventos_ajuste_univariado <- glue::glue("{config$dir$data}/{config$files$copulas$eventos_ajuste_univariado}")
 if (file.exists(eventos_ajuste_univariado))
   file.remove(eventos_ajuste_univariado)
-feather::write_feather(serie_observada_ajuste_univariado, eventos_ajuste_univariado)
+base::saveRDS(serie_observada_ajuste_univariado, eventos_ajuste_univariado)
 
 # Se guarda la semilla, para poder generar las mismas series posteriormente 
 # (tanto las perturbadas como la utilizada para el ajuste univariado)
 seed_filename <- glue::glue("{config$dir$data}/{config$files$copulas$semilla_utilizada}")
 if (file.exists(seed_filename))
   file.remove(seed_filename)
-saveRDS(config$params$s.series.perturbadas, seed_filename)
+base::saveRDS(config$params$s.series.perturbadas, seed_filename)
 
 # ------------------------------------------------------------------------------
 
@@ -351,7 +356,7 @@ if (length(task.errors) > 0) {
 } else {
   # Guardar resultados en un archivo fácil de compartir
   script$info(glue::glue("Guardando ajustes univariados en el archivo {results_filename}"))
-  saveRDS(ajuste.univariado.x.ubic.var.dist, results_filename)
+  base::saveRDS(ajuste.univariado.x.ubic.var.dist, results_filename)
 }
 
 # ------------------------------------------------------------------------------
@@ -422,7 +427,7 @@ if (length(task.mejor.ajuste.errors) > 0) {
 } else {
   # Guardar resultados en un archivo fácil de compartir
   script$info(glue::glue("Guardando mejores ajustes univariados en el archivo {results_filename}"))
-  saveRDS(mejor.ajuste.univariado.x.ubic.var, results_filename)
+  base::saveRDS(mejor.ajuste.univariado.x.ubic.var, results_filename)
 }
 
 # ------------------------------------------------------------------------------
@@ -505,7 +510,7 @@ if (length(task.errors) > 0) {
 } else {
   # Guardar resultados en un archivo fácil de compartir
   script$info(glue::glue("Guardando las series perturbadas y sus ajustes univariados en el archivo {results_filename}"))
-  saveRDS(series.perturbadas.ajustadas, results_filename)
+  base::saveRDS(series.perturbadas.ajustadas, results_filename)
 }
 
 # ------------------------------------------------------------------------------
@@ -588,7 +593,7 @@ if (length(task.errors) > 0) {
 } else {
   # Guardar resultados en un archivo fácil de compartir
   script$info(glue::glue("Guardando estacionariedad de las series en el archivo {results_filename}"))
-  saveRDS(estacionariedad, results_filename)
+  base::saveRDS(estacionariedad, results_filename)
 }
 
 # Consolidar resultados. La estacionariedad es la única métrica en la que se consideran
@@ -674,7 +679,7 @@ if (length(task.errors) > 0) {
 } else {
   # Guardar resultados en un archivo fácil de compartir
   script$info(glue::glue("Guardando dependencia de las series en el archivo {results_filename}"))
-  saveRDS(dependencia, results_filename)
+  base::saveRDS(dependencia, results_filename)
 }
 
 # ------------------------------------------------------------------------------
@@ -746,7 +751,7 @@ if (length(task.errors) > 0) {
 } else {
   # Guardar resultados en un archivo fácil de compartir
   script$info(glue::glue("Guardando los ajustes multivariados en el archivo {results_filename}"))
-  saveRDS(copulas.ajustadas, results_filename)
+  base::saveRDS(copulas.ajustadas, results_filename)
 }
 
 # ------------------------------------------------------------------------------
@@ -816,7 +821,7 @@ if (length(task.errors) > 0) {
 } else {
   # Guardar resultados en un archivo fácil de compartir
   script$info(glue::glue("Guardando mejores ajustes multivariados en el archivo {results_filename}"))
-  saveRDS(mejor.ajuste.copulas, results_filename)
+  base::saveRDS(mejor.ajuste.copulas, results_filename)
 }
 
 # ------------------------------------------------------------------------------
@@ -893,7 +898,7 @@ if (length(task.errors) > 0) {
 } else {
   # Guardar resultados en un archivo fácil de compartir
   script$info(glue::glue("Guardando ajuste multivariado final en el archivo {results_filename}"))
-  saveRDS(ajuste.multivariado.final, results_filename)
+  base::saveRDS(ajuste.multivariado.final, results_filename)
 }
 
 # ------------------------------------------------------------------------------
