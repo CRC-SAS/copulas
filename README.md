@@ -260,9 +260,7 @@ Ver `list.of.packages` en `01_copulas.R`: `dplyr`, `purrr`, `lubridate`,
 explícito en el script): `data.table`, `glue`, `tidyr`, `tibble`, `rlang`,
 `xts`, `npcp`, `Kendall`, `caret`.
 
-> **Nota:** las funciones `TestBoxPierceLjungBox`/`TestEstacionaridadEmpirico`
-> y los tests de independencia (`lib/funciones_test_estacionaridad.R`,
-> `lib/funciones_test_independencia.R`) llaman a una función
-> `ParametrosADataFrame` que no está definida en ningún archivo de este
-> repositorio. Antes de correr el pipeline conviene confirmar de dónde debe
-> provenir (probablemente un paquete interno de CRC-SAS no incluido todavía).
+> **Nota:** `lib/funciones_bondad_ajuste.R` está codificado en ISO-8859-1
+> (Latin-1) en vez de UTF-8 como el resto del repo. R lo sourcea sin
+> problema, pero herramientas de texto que asumen UTF-8 (`grep` sin `-a`,
+> por ejemplo) pueden no encontrar coincidencias en ese archivo.
