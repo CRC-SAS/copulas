@@ -264,3 +264,43 @@ explícito en el script): `data.table`, `glue`, `tidyr`, `tibble`, `rlang`,
 > (Latin-1) en vez de UTF-8 como el resto del repo. R lo sourcea sin
 > problema, pero herramientas de texto que asumen UTF-8 (`grep` sin `-a`,
 > por ejemplo) pueden no encontrar coincidencias en ese archivo.
+
+## Problemas conocidos
+
+**El test de bondad de ajuste `Sn` no tolera variables con pocos valores
+distintos (empates).** Al armar un CSV de prueba con datos ajenos al dominio
+de sequías (eventos con una `duracion` entera de rango chico — ej. 7 valores
+distintos sobre 82 eventos), el Paso 10 (`AjustarCopulas`) abortó todo el
+script con errores como:
+
+```
+Error in `dplyr::filter()`: ℹ In argument: `parametro == "p.value"`.
+Caused by error: ! objeto 'parametro' no encontrado
+```
+
+Causa raíz (reproducida corriendo `TestSn` fuera del cluster paralelo, donde
+sí se ve el error real que los workers de `doSNOW` ocultan):
+
+```
+Error in optim(...): non-finite finite-difference value [1]
+```
+
+`TestSn` (`lib/funciones_bondad_ajuste_copulas.R`) usa
+`copula::gofCopula(method = "Sn", simulation = "pb")`, que reestima la
+cópula en cada réplica del bootstrap vía `optim(method = "BFGS")`. Si una de
+las dos variables de la cópula tiene muy pocos valores distintos en relación
+a la cantidad de eventos, la superficie de log-verosimilitud queda
+degenerada y el cálculo del gradiente por diferencias finitas da un valor no
+finito, y `optim()` aborta.
+
+Ese error se propaga porque `TestearBondadAjusteCopulas` captura el fallo de
+`TestSn` puntualmente (el resultado queda con 0 filas **y 0 columnas**), pero
+la línea siguiente — `dplyr::filter(parametro == "p.value")`, sin
+`tryCatch` — no tolera un data frame sin columnas y explota. Ese segundo
+error sí llega sin capturar hasta `Task$run()`, que aborta todo el script.
+
+**Cómo evitarlo al armar un CSV de prueba:** elegir pares en
+`variables_copulas` donde ambas variables sean razonablemente continuas
+(muchos valores distintos respecto a la cantidad de eventos). Evitar
+emparejar una variable muy discretizada (p. ej. una duración en días con
+rango chico) como uno de los dos lados de la cópula.
