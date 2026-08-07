@@ -32,12 +32,15 @@ El manual metodológico extendido está en
 
 ## 2. Arquitectura
 
-### 2.1 Scripts principales
+### 2.1 Script principal
 
-| Script | Rol | Estado |
-|---|---|---|
-| `01_copulas.R` | Pipeline de producción. Dirigido por 3 archivos YAML, ejecuta el proceso completo (12 pasos) en paralelo para todas las ubicaciones/variables/cópulas configuradas. | Activo — último fix funcional en 2021-03. |
-| `01_script_maestro.R` | Prototipo exploratorio para una sola estación (hardcodea `estacion.usar`, carga un `.rda` desde una ruta local de otro colaborador). Sirvió para iterar antes de construir `01_copulas.R`. | Desactualizado — ver sección "Archivos en desuso" más abajo. |
+| Script | Rol |
+|---|---|
+| `01_copulas.R` | Pipeline de producción. Dirigido por 3 archivos YAML, ejecuta el proceso completo (12 pasos) en paralelo para todas las ubicaciones/variables/cópulas configuradas. |
+
+Prototipos y configuraciones superadas (p. ej. el script exploratorio de una
+sola estación) fueron movidos a [`archive/`](archive/README.md), que documenta
+qué se archivó y por qué.
 
 ### 2.2 Flujo del pipeline (`01_copulas.R`)
 
@@ -110,20 +113,54 @@ docs/                                       → guía conceptual y manual metodo
 
 Se necesitan **3 YAML + 1 CSV**:
 
-**1) `configuracion_copulas.yml`** — ya versionado, define paths absolutos y
-cantidad de procesos paralelos:
+**1) `configuracion_copulas.yml`** — está versionado, pero es específico del
+entorno donde se corre (apunta a la ruta absoluta del checkout local). Por eso
+existe `configuracion_copulas.yml.tmpl`, con `${base}` como placeholder para
+generarlo por entorno:
 
 ```yaml
 dir:
-  base: /devel/CRC-SAS/copulas/
-  run: /devel/CRC-SAS/copulas/run/
-  lib: /devel/CRC-SAS/copulas/lib/R/
-  data: /devel/CRC-SAS/copulas/data/
+  base: <ruta absoluta al checkout del repo>/
+  run:  <ruta absoluta al checkout del repo>/run/
+  lib:  <ruta absoluta al checkout del repo>/lib/R/
+  data: <ruta absoluta al checkout del repo>/data/
 max.procesos: 8
 ```
 
-**2) `parametros_copulas.yml`** — ya versionado con valores de ejemplo/prueba;
-ajustar a los datos reales:
+| Clave | Qué es |
+|---|---|
+| `dir.base` | Raíz del repositorio |
+| `dir.run` | Carpeta de logs (`CalcCopulas.log` + uno por tarea paralela) y `.pid` de la corrida |
+| `dir.lib` | Carpeta con el framework de ejecución (`Script.R`, `Task.R`, `Helpers.R`) |
+| `dir.data` | Carpeta con `input/` (insumos), `partial/` (resultados intermedios) y `output/` (resultados finales) |
+| `max.procesos` | Cantidad máxima de procesos paralelos que usa `Task$run()` (vía `doSNOW`) |
+
+> El `.tmpl` agrega un subdirectorio `/Copulas/` adicional bajo `${base}`;
+> el archivo ya versionado no sigue exactamente ese patrón — al regenerarlo,
+> apuntá los 4 paths a la raíz real de tu checkout.
+
+**2) `parametros_copulas.yml`** — define **qué** se analiza y con qué
+criterios. Ya está versionado con valores de ejemplo/prueba (una sola
+ubicación, pocas series/realizaciones); hay que ajustarlo a la corrida real:
+
+| Clave | Qué define |
+|---|---|
+| `ubicaciones` | Lista de `{id, nombre}` a procesar. Cada `id` debe existir en la columna `*_id` del CSV de eventos |
+| `configuraciones.eventos` | **Una única fila** (`conf_id, indice, escala, distribucion, metodo_ajuste`) que identifica la combinación índice/escala/distribución que se está analizando (ej. SPI a escala 6 ajustado con Gamma). El script aborta si hay más de una fila |
+| `variables_copulas` | Pares `variable_x`/`variable_y` sobre los que se ajustan cópulas (ej. duración-intensidad). Deben ser columnas válidas del CSV de eventos: `duracion`, `intensidad`, `magnitud`, `minimo`, `maximo` |
+| `eventos.tipo` | Valor de `tipo_evento` a filtrar del CSV (ej. `"seco"`) |
+| `eventos.duracion_minima` | Duración mínima (**en pentadas**) para que un evento se incluya en el análisis |
+| `valores_minimos` | Valor mínimo de detección por variable, usado para generar el ruido de las series perturbadas (función `AgregarRuido`). Debe cubrir cada variable usada en `variables_copulas` |
+| `umbral.p.valor` | Umbral de significancia usado en todos los tests estadísticos (estacionariedad, independencia, bondad de ajuste) |
+| `n.series.perturbadas` | Cantidad de series con ruido que se generan por variable, para propagar incertidumbre en el ajuste |
+| `n.realizaciones` | Cantidad de realizaciones del generador estocástico (externo a este repo) a considerar; filtra el CSV por `realizacion <= n.realizaciones` |
+| `s.series.perturbadas` | Semilla (`set.seed`) para la generación de series perturbadas, para poder reproducir la corrida |
+| `tests.estacionariedad` | Tests a aplicar (cada uno debe tener su función `Test<nombre>` en `lib/funciones_test_estacionaridad.R`) |
+| `tests.dependencia` | Tests de independencia a aplicar (`lib/funciones_test_independencia.R`) |
+| `configuracion.ajuste.copula` | Tabla familia de cópula → función de ajuste + flag `uso_sequias` para habilitarla. Ya viene completa (6 familias); normalmente no se edita |
+| `configuracion.ajuste.univariado` | Igual, para las ~25 distribuciones univariadas soportadas por `lmomco`. Ya viene completa; normalmente no se edita |
+
+Ejemplo abreviado (ver el archivo completo para las tablas de ajuste):
 
 ```yaml
 ubicaciones:
@@ -140,13 +177,22 @@ eventos:
 valores_minimos:
   - { variable: "duracion", valor_minimo_deteccion: 1 }
   - { variable: "intensidad", valor_minimo_deteccion: 0.1 }
+umbral.p.valor: 0.05
 n.series.perturbadas: 2
 n.realizaciones: 2
 s.series.perturbadas: 123
 ```
 
-**3) `data/configuracion_archivos_utilizados.yml`** — ya versionado, define
-nombres de archivos de entrada/salida:
+**3) `data/configuracion_archivos_utilizados.yml`** — define **cómo se
+llaman** los archivos que el pipeline lee/escribe en cada paso (uno por
+artefacto: semilla, eventos completos, ajustes univariados, estacionariedad,
+dependencia, ajustes multivariados, resultado final, etc.):
+
+| Clave | Qué es |
+|---|---|
+| `identificador_corrida` (`&idc`) | Sufijo que se antepone a todos los nombres de archivo generados (ej. `id1`), para no pisar los artefactos de otra corrida |
+| `eventos_identificados` | Nombre del CSV de entrada, relativo a `dir.data` — es el **único** archivo de esta lista que hay que proveer a mano; el resto los va generando el propio pipeline |
+| `copulas.*` (el resto de las claves) | Un nombre de archivo `.rds` por cada artefacto intermedio/final (`partial/` u `output/` según corresponda). No suele haber que tocarlos salvo que quieras versionar corridas con nombres distintos |
 
 ```yaml
 identificador_corrida: &idc "id1"
@@ -157,7 +203,10 @@ copulas:
 ```
 
 **4) CSV de eventos** (`data/input/eventos_identificados_unconditional.csv` por
-defecto, **no versionado**) — una fila por evento, columnas obligatorias:
+defecto, **no versionado**) — es el insumo real del análisis: la salida de la
+identificación de eventos secos + generador estocástico (procesos externos a
+este repo, ver sección 1). Una fila por evento (observado o de una
+realización sintética), con estas columnas obligatorias:
 
 | Columna | Tipo | Descripción |
 |---|---|---|
