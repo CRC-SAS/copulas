@@ -57,7 +57,7 @@ TestRMSEIQR <- function(x, probs = seq(from = 0.01, to = 0.99, by = 0.1),
   # Calculo del RMSE entre los cuantiles observados y los estimados a partir de una distribucion
   # Validar parametros
   base::stopifnot(is.numeric(x))
-  base::stopifnot(all(probs >= 0.0 && probs <= 1.0))
+  base::stopifnot(all(probs >= 0.0 & probs <= 1.0))
   base::stopifnot(
     (! is.null(ajuste) && (class(ajuste) == "list")))
   
@@ -89,7 +89,7 @@ TestCCC <- function(x, probs = seq(from = 0.01, to = 0.99, by = 0.01),
   
   # Validar parametros
   base::stopifnot(is.numeric(x))
-  base::stopifnot(all(probs >= 0.0 && probs <= 1.0))
+  base::stopifnot(all(probs >= 0.0 & probs <= 1.0))
   base::stopifnot(
     (! is.null(ajuste) && (class(ajuste) == "list"))
   ) 
@@ -126,7 +126,7 @@ TestQCOMHD <- function(x, probs = seq(from = 0.1, to = 1, by = 0.1),
   
   # Validar parametros
   base::stopifnot(is.numeric(x))
-  base::stopifnot(all(probs >= 0.0 && probs <= 1.0))
+  base::stopifnot(all(probs >= 0.0 & probs <= 1.0))
   base::stopifnot(is.integer(numero.muestras))
   base::stopifnot(
     (! is.null(ajuste) && (class(ajuste) == "list"))
@@ -168,7 +168,7 @@ ParametrosALista <- function(parametros.ajuste) {
 }
 
 # --- Consolidacion de tests
-TestearBondadAjuste <- function(x, umbral.p.valor, ajuste = NULL) {
+TestearBondadAjuste <- function(x, umbral.p.valor, ajuste = NULL, omitir.tests.continuidad = FALSE) {
   
   
   # 2. Inicializar objeto a devolver
@@ -178,32 +178,42 @@ TestearBondadAjuste <- function(x, umbral.p.valor, ajuste = NULL) {
   #    Si alguno de los tests devuelve NA o un valor de p-value menor al umbral,
   #    interpretar el resultado del test como un fallo. Luego, si alguno de los tests falla, entonces
   #    interpretar como malo el ajuste y devolver todos los parametros en NA.
+  #    KS/AD/CvM asumen que x proviene de una distribucion continua: para variables
+  #    discretas (con pocos valores distintos y muchos empates, ej. duracion en dias)
+  #    esos tests rechazan sistematicamente el ajuste aunque el resto de las metricas
+  #    (RMSEIQR/CCC/QCOMHD, seccion 4) sean razonables. omitir.tests.continuidad permite
+  #    saltear KS/AD/CvM para esos casos y dejar que esas otras metricas definan el
+  #    mejor ajuste en DeterminarMejorAjusteUnivariado.
   falla.ajuste.parametrico <- FALSE
   if (! is.null(ajuste)) {
     falla.ajuste.parametrico <- any(is.na(ajuste))
     if (! falla.ajuste.parametrico) {
-      estadisticos <- purrr::map_dfr(
-        .x = c("KS", "AD", "CvM"),
-        .f = function(test.name) {
-          func.name <- paste0("Test", test.name)
-          tryCatch({
-            estadisticos.test <- ParametrosADataFrame(do.call(what = func.name, args = list(x = x, ajuste = ajuste))) %>%
-              dplyr::mutate(test = test.name) %>%
-              dplyr::select(test, parametro, valor)
-          }, error = function(e) {
-            cat(e$message, "\n")
-            return (NULL)
-          })
+      if (! omitir.tests.continuidad) {
+        estadisticos <- purrr::map_dfr(
+          .x = c("KS", "AD", "CvM"),
+          .f = function(test.name) {
+            func.name <- paste0("Test", test.name)
+            tryCatch({
+              estadisticos.test <- ParametrosADataFrame(do.call(what = func.name, args = list(x = x, ajuste = ajuste))) %>%
+                dplyr::mutate(test = test.name) %>%
+                dplyr::select(test, parametro, valor)
+            }, error = function(e) {
+              cat(e$message, "\n")
+              return (NULL)
+            })
+          }
+        )
+        resultados.tests$estadisticos <- estadisticos
+
+        # Determinar si pasan los tests o no
+        p.values <- estadisticos %>%
+          dplyr::filter(parametro == "p.value") %>%
+          dplyr::pull(valor)
+        if (any(is.na(p.values)) || any(p.values < umbral.p.valor)) {
+          resultados.tests$pasa.tests <- FALSE
+        } else {
+          resultados.tests$pasa.tests <- TRUE
         }
-      )
-      resultados.tests$estadisticos <- estadisticos
-      
-      # Determinar si pasan los tests o no
-      p.values <- estadisticos %>%
-        dplyr::filter(parametro == "p.value") %>%
-        dplyr::pull(valor)
-      if (any(is.na(p.values)) || any(p.values < umbral.p.valor)) {
-        resultados.tests$pasa.tests <- FALSE  
       } else {
         resultados.tests$pasa.tests <- TRUE 
       }

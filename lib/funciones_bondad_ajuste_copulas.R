@@ -174,7 +174,7 @@ TestValidacionCruzada <- function(copula, x, y) {
 
 
 # --- Consolidacion de tests
-TestearBondadAjusteCopulas <- function(x, y,  umbral.p.valor, copula = NULL) {
+TestearBondadAjusteCopulas <- function(x, y,  umbral.p.valor, copula = NULL, omitir.tests.continuidad = FALSE) {
   
   
   # 2. Inicializar objeto a devolver
@@ -184,31 +184,47 @@ TestearBondadAjusteCopulas <- function(x, y,  umbral.p.valor, copula = NULL) {
   #    Si alguno de los tests devuelve NA o un valor de p-value menor al umbral,
   #    interpretar el resultado del test como un fallo. Luego, si alguno de los tests falla, entonces
   #    interpretar como malo el ajuste y devolver todos los parametros en NA.
+  #    TestSn (copula::gofCopula) asume pseudo-observaciones de variables continuas: si
+  #    alguna de las dos variables de la copula es discreta (pocos valores distintos,
+  #    muchos empates, ej. duracion en dias), optim() puede fallar dentro de gofCopula.
+  #    omitir.tests.continuidad permite saltear Sn para esos casos y dejar que el resto
+  #    de los tests (AIC/BIC/RMSE/validacion cruzada, seccion 4) definan la mejor copula.
+  falla.ajuste <- TRUE
   if (! is.null(copula$copula)) {
     falla.ajuste <- any(is.na(copula$parametro))
     if (! falla.ajuste) {
-      estadisticos <- purrr::map_dfr(
-        .x = c("Sn"),
-        .f = function(test.name) {
-          func.name <- paste0("Test", test.name)
-          tryCatch({
-            estadisticos.test <- ParametrosADataFrame(do.call(what = func.name, args = list(x = x, y = y,  copula = copula))) %>%
-              dplyr::mutate(test = test.name) %>%
-              dplyr::select(test, parametro, valor)
-          }, error = function(e) {
-            cat(e$message, "\n")
-            return (NULL)
-          })
+      if (! omitir.tests.continuidad) {
+        estadisticos <- purrr::map_dfr(
+          .x = c("Sn"),
+          .f = function(test.name) {
+            func.name <- paste0("Test", test.name)
+            tryCatch({
+              estadisticos.test <- ParametrosADataFrame(do.call(what = func.name, args = list(x = x, y = y,  copula = copula))) %>%
+                dplyr::mutate(test = test.name) %>%
+                dplyr::select(test, parametro, valor)
+            }, error = function(e) {
+              cat(e$message, "\n")
+              return (NULL)
+            })
+          }
+        )
+        resultados.tests$estadisticos <- estadisticos
+
+        # Determinar si pasan los tests o no. Si el test Sn no pudo calcularse
+        # (ej. tryCatch de arriba atrapo un error de optim()), estadisticos queda
+        # sin la columna "parametro": tratarlo como un fallo del test, no un crash.
+        if (! "parametro" %in% names(estadisticos)) {
+          resultados.tests$pasa.tests <- FALSE
+        } else {
+          p.values <- estadisticos %>%
+            dplyr::filter(parametro == "p.value") %>%
+            dplyr::pull(valor)
+          if (length(p.values) == 0 || any(is.na(p.values)) || any(p.values < umbral.p.valor)) {
+            resultados.tests$pasa.tests <- FALSE
+          } else {
+            resultados.tests$pasa.tests <- TRUE
+          }
         }
-      )
-      resultados.tests$estadisticos <- estadisticos
-      
-      # Determinar si pasan los tests o no
-      p.values <- estadisticos %>%
-        dplyr::filter(parametro == "p.value") %>%
-        dplyr::pull(valor)
-      if (any(is.na(p.values)) || any(p.values < umbral.p.valor)) {
-        resultados.tests$pasa.tests <- FALSE  
       } else {
         resultados.tests$pasa.tests <- TRUE 
       }
