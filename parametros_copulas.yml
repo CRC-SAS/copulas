@@ -50,6 +50,17 @@ umbral.p.valor: 0.05
 # ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
+# Variables cuya serie es discreta (pocos valores distintos, muchos empates,
+# ej. duracion medida en dias/pentadas enteras) para las que los tests de
+# bondad de ajuste KS/Anderson-Darling/Cramér-von Mises (que asumen una
+# distribucion continua) se omiten al elegir el mejor ajuste univariado. El
+# ajuste se sigue evaluando (y seleccionando entre distribuciones candidatas)
+# en base a RMSEIQR/CCC/QCOMHD. Dejar vacío para no exceptuar ninguna variable.
+# ------------------------------------------------------------------------------
+variables_sin_test_continuidad: []
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
 # Número de series perturbadas a ser consideradas
 # ------------------------------------------------------------------------------
 n.series.perturbadas: 2

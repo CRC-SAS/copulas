@@ -173,7 +173,7 @@ MejorAjusteMultivariadoUC <- function(input.value, script, copulas.ajustadas, um
 }
 
 
-AjustarCopulas <- function(input.value, script, eventos.completos, umbral.p.valor) {
+AjustarCopulas <- function(input.value, script, eventos.completos, umbral.p.valor, variables.discretas = NULL) {
   # Obtener la ubicación y las variables de la copula, para cada serie perturbada 
   # (la distribución es única -la que mejor ajustó- para cada par ubicación, variable)
   vcu <- input.value
@@ -230,10 +230,12 @@ AjustarCopulas <- function(input.value, script, eventos.completos, umbral.p.valo
   # -----------------------------------------------------------------------------#
   
   # Calcular bondad de ajuste
+  omitir.tests.continuidad <- (vcu$variable_x %in% variables.discretas) || (vcu$variable_y %in% variables.discretas)
   bondad.ajuste.copula <- TestearBondadAjusteCopulas(x = parametros$x,
                                                      y = parametros$y,
                                                      umbral.p.valor = umbral.p.valor,
-                                                     copula = ajuste.copula)
+                                                     copula = ajuste.copula,
+                                                     omitir.tests.continuidad = omitir.tests.continuidad)
   
   # ------------------------------------------------------------------------------
   
@@ -451,7 +453,7 @@ MejorAjusteUnivariadoUV <- function(input.value, script, ajustes.univariados) {
 }
 
 
-AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.valor) {
+AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.valor, variables.discretas = NULL) {
   # Ubicación, variable y distribución 
   uvd <- input.value
   
@@ -490,7 +492,8 @@ AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.v
   ajuste.univariado <- AjusteUnivariadoConfig(x = x,
                                               umbral.p.valor = umbral.p.valor,
                                               configuracion, parametros.lmomentos,
-                                              parametros.maxima.verosimilitud)
+                                              parametros.maxima.verosimilitud,
+                                              omitir.tests.continuidad = uvd$variable %in% variables.discretas)
   
   # ------------------------------------------------------------------------------
   

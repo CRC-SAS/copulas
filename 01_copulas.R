@@ -331,7 +331,8 @@ script$info("Computando ajuste univariado para cada combinación de ubicación, 
 ajuste.univariado.x.ubic.var.dist <- task$run(number.of.processes = config$max.procesos,
                                               input.values = ubicacion_x_variable_x_distribucion,  
                                               serie.observada = serie_observada_ajuste_univariado,
-                                              umbral.p.valor = config$params$umbral.p.valor)
+                                              umbral.p.valor = config$params$umbral.p.valor,
+                                              variables.discretas = config$params$variables_sin_test_continuidad)
 
 # Transformar resultados a un objeto de tipo tibble
 ajuste.univariado.x.ubic.var.dist <- ajuste.univariado.x.ubic.var.dist %>% purrr::map_dfr(~.x)
@@ -725,7 +726,8 @@ script$info("Ajustar las cópulas usando las series perturbadas estacionarias y 
 copulas.ajustadas <- task$run(number.of.processes = config$max.procesos,
                               input.values = copulas_a_ajustar,
                               eventos.completos = eventos_completos,
-                              umbral.p.valor = config$params$umbral.p.valor)
+                              umbral.p.valor = config$params$umbral.p.valor,
+                              variables.discretas = config$params$variables_sin_test_continuidad)
 
 # Transformar resultados a un objeto de tipo tibble
 copulas.ajustadas <- copulas.ajustadas %>% purrr::map_dfr(~.x)
