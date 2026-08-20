@@ -137,16 +137,20 @@ MejorAjusteMultivariadoUC <- function(input.value, script, copulas.ajustadas, um
         Sn.ajuste <- bondad %>%
           dplyr::filter(test == "Sn") %>%
           dplyr::pull(mediana)
+        # Si se omitio el test Sn (variables_sin_test_continuidad, ver
+        # TestearBondadAjusteCopulas), no hay fila "Sn" y Sn.ajuste queda vacio.
+        # Tratarlo como empate neutro para que la eleccion caiga en AIC/BIC/MRE/RMSE/Vx.
+        if (length(Sn.ajuste) == 0) Sn.ajuste <- mejor.ajuste$Sn
         Vx.ajuste <- bondad %>%
           dplyr::filter(test == "Validacion cruzada") %>%
           dplyr::pull(mediana)
         if (!is.na(mejor.ajuste$familia)) {
           es.mejor.ajuste <- (Sn.ajuste > mejor.ajuste$Sn) || 
-            ((Sn.ajuste == mejor.ajuste$Sn) && (aic.ajuste <- mejor.ajuste$AIC)) ||
+            ((Sn.ajuste == mejor.ajuste$Sn) && (aic.ajuste < mejor.ajuste$AIC)) ||
             ((Sn.ajuste == mejor.ajuste$Sn) && (aic.ajuste == mejor.ajuste$AIC) && (bic.ajuste < mejor.ajuste$BIC)) || 
             ((Sn.ajuste == mejor.ajuste$Sn) && (aic.ajuste == mejor.ajuste$AIC) && (bic.ajuste == mejor.ajuste$BIC) && (mre.ajuste < mejor.ajuste$MRE)) ||
             ((Sn.ajuste == mejor.ajuste$Sn) && (aic.ajuste == mejor.ajuste$AIC) && (bic.ajuste == mejor.ajuste$BIC) && (mre.ajuste == mejor.ajuste$MRE) && (rmse.ajuste < mejor.ajuste$RMSE)) || 
-            ((Sn.ajuste == mejor.ajuste$Sn) && (aic.ajuste == mejor.ajuste$AIC) && (bic.ajuste == mejor.ajuste$BIC) && (mre.ajuste == mejor.ajuste$MRE) && (rmse.ajuste == mejor.ajuste$RMSE) && (Vx.ajuste <- mejor.ajuste$Vx)) 
+            ((Sn.ajuste == mejor.ajuste$Sn) && (aic.ajuste == mejor.ajuste$AIC) && (bic.ajuste == mejor.ajuste$BIC) && (mre.ajuste == mejor.ajuste$MRE) && (rmse.ajuste == mejor.ajuste$RMSE) && (Vx.ajuste < mejor.ajuste$Vx))
         } else {
           es.mejor.ajuste <- TRUE
         }
