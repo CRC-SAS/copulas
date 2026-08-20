@@ -508,3 +508,58 @@ AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.v
   return (uvd %>% dplyr::mutate(lmomentos = list(ajuste.univariado$lmomentos),
                                 maxima.verosimilitud = list(ajuste.univariado$maxima.verosimilitud)))
 }
+
+
+CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, eventos.completos,
+                                     niveles.anios, resolucion.grilla, margen.grilla, dir.salida.png) {
+  # Ubicación y copula a analizar
+  uc <- input.value
+
+  # Identificar la columna con el id de la ubicación (usualmente station_id, o point_id)
+  id_column <- IdentificarIdColumn(uc)
+
+  # Informar estado de la ejecución
+  script$info(glue::glue("Calculando período de retorno para la copula \"{uc$variable_x}-{uc$variable_y}\", ",
+                         "ubicación = {uc %>% dplyr::pull(!!id_column)}"))
+
+  # Obtener el ajuste multivariado (copula + ambas marginales) ya calculado para esta copula
+  copula_final <- copulas.finales %>%
+    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(uc, !!id_column),
+                  variable_x == uc$variable_x, variable_y == uc$variable_y)
+  mv <- copula_final$ajuste_multivariado[[1]]
+
+  # Series observadas (sin perturbar) para esta ubicación: dan n (cantidad de
+  # eventos), N (extension del registro en anios) y los puntos a graficar
+  eventos_ubic <- eventos.completos %>%
+    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(uc, !!id_column), tipo_serie == "observada")
+
+  fechas_x <- eventos_ubic %>% dplyr::filter(variable == uc$variable_x) %>% dplyr::pull(fecha_inicio)
+  n <- length(fechas_x)
+  N <- as.numeric(diff(range(fechas_x))) / 365.25
+
+  x_obs <- eventos_ubic %>% dplyr::filter(variable == uc$variable_x) %>% dplyr::pull(valor)
+  y_obs <- eventos_ubic %>% dplyr::filter(variable == uc$variable_y) %>% dplyr::pull(valor)
+
+  # Grilla de evaluacion: desde el minimo observado hasta el maximo observado
+  # + un margen (fraccion del rango observado), para poder ver isolineas mas
+  # alla de los eventos historicos
+  rango_x <- range(x_obs)
+  rango_y <- range(y_obs)
+  grid_x <- seq(rango_x[1], rango_x[2] + diff(rango_x) * margen.grilla, length.out = resolucion.grilla)
+  grid_y <- seq(rango_y[1], rango_y[2] + diff(rango_y) * margen.grilla, length.out = resolucion.grilla)
+
+  grilla <- CalcularGrillaPeriodoRetorno(mv, N, n, grid_x, grid_y)
+
+  familia   <- sub("Copula$", "", class(mv@copula))
+  id_valor  <- dplyr::pull(uc, !!id_column)
+  archivo_png <- glue::glue("{dir.salida.png}/periodo_retorno_{id_valor}_{uc$variable_x}_{uc$variable_y}.png")
+  titulo <- glue::glue("Período de retorno combinado - cópula {familia}\n",
+                       "{uc$variable_x}-{uc$variable_y} ({uc$nombre})")
+
+  GraficarPeriodoRetorno(grilla, niveles.anios, x_obs, y_obs,
+                         nombre_x = uc$variable_x, nombre_y = uc$variable_y,
+                         titulo = titulo, archivo_png = archivo_png)
+
+  return(uc %>% dplyr::mutate(familia = familia, N = N, n = n,
+                              archivo_png = archivo_png, grilla = list(grilla)))
+}

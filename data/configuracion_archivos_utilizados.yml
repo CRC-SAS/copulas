@@ -66,9 +66,16 @@ copulas:
   mejores_ajustes_multivariados: "output/mejores_ajustes_multivariados_<*idc>.rds"
 
   # Archivo con los resultados del análisis.
-  # FMT, es un objeto complejo, NO pude ser guardado en formato CSV. 
+  # FMT, es un objeto complejo, NO pude ser guardado en formato CSV.
   resultado_final: "output/copulas_<*idc>.rds"
-  
+
+  # Archivo con la grilla de período de retorno combinado (co-occurrence) para
+  # cada cópula final. Además, por cada cópula se genera un PNG en
+  # "output/periodo_retorno_<id_ubicacion>_<variable_x>_<variable_y>.png"
+  # (nombre dinámico, no depende de <*idc>).
+  # FMT, es un objeto complejo, NO pude ser guardado en formato CSV.
+  periodo_retorno: "output/periodo_retorno_<*idc>.rds"
+
   # Archivo con información sobre la corrida
   info_corrida: "partial/copulas_<*idc>.info"
 # ----------------------------------------------------------------------------

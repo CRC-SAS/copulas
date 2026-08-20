@@ -108,6 +108,7 @@ source(glue::glue("{config$dir$base}/lib/funciones_test_estacionaridad.R"), echo
 source(glue::glue("{config$dir$base}/lib/funciones_test_independencia.R"), echo = FALSE)
 source(glue::glue("{config$dir$base}/lib/funciones_ajuste_familias_copulas.R"), echo = FALSE)
 source(glue::glue("{config$dir$base}/lib/funciones_bondad_ajuste_copulas.R"), echo = FALSE)
+source(glue::glue("{config$dir$base}/lib/funciones_periodo_retorno.R"), echo = FALSE)
 source(glue::glue("{config$dir$base}/lib/funciones_mejor_ajuste_copula.R"), echo = FALSE)
 source(glue::glue("{config$dir$base}/lib/funciones_auxiliares.R"), echo = FALSE)
 source(glue::glue("{config$dir$base}/lib/funciones_worker.R"), echo = FALSE)
@@ -898,6 +899,88 @@ if (length(task.errors) > 0) {
   # Guardar resultados en un archivo fácil de compartir
   script$info(glue::glue("Guardando ajuste multivariado final en el archivo {results_filename}"))
   base::saveRDS(ajuste.multivariado.final, results_filename)
+}
+
+# ------------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------#
+# --- PASO 13. Calcular el período de retorno combinado (co-occurrence) para
+# --- cada cópula final con ajuste multivariado válido (se excluyen los NA,
+# --- ver PASO 12), y generar un gráfico de isolíneas por cada una, análogo a
+# --- la Figura 7 de Chen et al. 2024: eje x = variable_x, eje y = variable_y,
+# --- contornos = años de retorno. Fórmula:
+# --- T = N / (n*(1 - F_X(x) - F_Y(y) + C(F_X(x), F_Y(y))))
+# -----------------------------------------------------------------------------#
+
+# Definir el objeto sobre el cual iterar: una fila por cópula final válida
+copulas_finales_observada <- ajuste.multivariado.final %>%
+  dplyr::filter(tipo_serie == "observada", !is.na(ajuste_multivariado))
+
+periodo_retorno_input <- copulas_finales_observada %>%
+  dplyr::select(!!id_column, nombre, variable_x, variable_y)
+
+if (nrow(periodo_retorno_input) == 0) {
+  script$warn("Ninguna cópula tiene ajuste multivariado válido: se omite el cálculo de período de retorno")
+} else {
+  # Definir el nombre de la función a ser paralelizada
+  function_name <- "CalcularPeriodoRetornoUC"
+
+  # Definir nombre de archivos .log y .out de corridas anteriores
+  task_logfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.log")
+  task_outfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.out")
+
+  # Borrar archivos .log y .out de corridas anteriores
+  if (file.exists(task_logfile))
+    file.remove(task_logfile)
+  if (file.exists(task_outfile))
+    file.remove(task_outfile)
+
+  # Definir nombre del archivo donde se van a guardar los resultados
+  results_filename <- glue::glue("{config$dir$data}/{config$files$copulas$periodo_retorno}")
+
+  # Borrar archivo de resultado de corridas anteriores
+  if (file.exists(results_filename))
+    file.remove(results_filename)
+
+  # Crear tarea distribuida y ejecutarla
+  task <- Task$new(parent.script = script,
+                   func.name = function_name,
+                   packages = list.of.packages)
+
+  # Informar inicio de ejecución
+  script$info("Calculando período de retorno combinado para cada cópula final")
+  # Ejecutar tarea distribuida
+  periodo.retorno <- task$run(number.of.processes = config$max.procesos,
+                              input.values = periodo_retorno_input,
+                              copulas.finales = copulas_finales_observada,
+                              eventos.completos = eventos_completos,
+                              niveles.anios = config$params$periodo_retorno$niveles_anios,
+                              resolucion.grilla = config$params$periodo_retorno$resolucion_grilla,
+                              margen.grilla = config$params$periodo_retorno$margen_grilla,
+                              dir.salida.png = glue::glue("{config$dir$data}/output"))
+
+  # Transformar resultados a un objeto de tipo tibble
+  periodo.retorno <- periodo.retorno %>% purrr::map_dfr(~.x)
+
+  # Agregar log de la tarea al log del script
+  file.append(script_logfile, task_logfile)
+
+  # Si hay errores, terminar ejecucion
+  task.errors <- task$getErrors()
+  if (length(task.errors) > 0) {
+    for (error.obj in task.errors) {
+      id_column <- IdentificarIdColumn(periodo_retorno_input[1,])
+      script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
+                             "copula=\"{error.obj$input.value[['variable_x']]}-{error.obj$input.value[['variable_y']]}\")",
+                             ": {error.obj$error}"))
+    }
+    script$error("Finalizando script de forma ANORMAL")
+  } else {
+    # Guardar resultados en un archivo fácil de compartir
+    script$info(glue::glue("Guardando período de retorno en el archivo {results_filename}"))
+    base::saveRDS(periodo.retorno, results_filename)
+  }
 }
 
 # ------------------------------------------------------------------------------
