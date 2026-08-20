@@ -4,7 +4,7 @@
 # ------------------------------------------------------------------------------#
 
 AjusteUnivariadoConfig <- function(x, umbral.p.valor, configuracion, parametros.lmomentos, 
-                                   parametros.maxima.verosimilitud) {
+                                   parametros.maxima.verosimilitud, omitir.tests.continuidad = FALSE) {
   
   # Ajustar por L-Momentos y determinar la bondad del ajuste
   ajuste.lmomentos <- NULL
@@ -12,8 +12,9 @@ AjusteUnivariadoConfig <- function(x, umbral.p.valor, configuracion, parametros.
   tryCatch({
     ajuste.lmomentos <- do.call(what = configuracion$funcion_ajuste_lmomentos, 
                                 args = parametros.lmomentos)
-    bondad.ajuste.lmomentos <- TestearBondadAjuste(x = x, umbral.p.valor = umbral.p.valor, 
-                                                   ajuste = ajuste.lmomentos)
+    bondad.ajuste.lmomentos <- TestearBondadAjuste(x = x, umbral.p.valor = umbral.p.valor,
+                                                   ajuste = ajuste.lmomentos,
+                                                   omitir.tests.continuidad = omitir.tests.continuidad)
   }, error = function(e) {
     warning(paste0("Error al ejecutar ajuste por L-Momentos de distribucion ",
                    configuracion$distribucion, ": ", as.character(e)))
@@ -25,8 +26,9 @@ AjusteUnivariadoConfig <- function(x, umbral.p.valor, configuracion, parametros.
   tryCatch({
     ajuste.maxima.verosimilitud <- do.call(what = configuracion$funcion_ajuste_maxima_verosimilitud, 
                                            args = parametros.maxima.verosimilitud)
-    bondad.ajuste.maxima.verosimilitud <- TestearBondadAjuste(x = x, umbral.p.valor = umbral.p.valor, 
-                                                              ajuste = ajuste.maxima.verosimilitud)  
+    bondad.ajuste.maxima.verosimilitud <- TestearBondadAjuste(x = x, umbral.p.valor = umbral.p.valor,
+                                                              ajuste = ajuste.maxima.verosimilitud,
+                                                              omitir.tests.continuidad = omitir.tests.continuidad)
   }, error = function(e) {
     warning(paste0("Error al ejecutar ajuste por Maxima Versomilitud de distribucion ",
                    configuracion$distribucion, ": ", as.character(e)))

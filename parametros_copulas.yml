@@ -50,6 +50,30 @@ umbral.p.valor: 0.05
 # ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
+# Variables cuya serie es discreta (pocos valores distintos, muchos empates,
+# ej. duracion medida en dias/pentadas enteras) para las que los tests de
+# bondad de ajuste KS/Anderson-Darling/Cramér-von Mises (que asumen una
+# distribucion continua) se omiten al elegir el mejor ajuste univariado. El
+# ajuste se sigue evaluando (y seleccionando entre distribuciones candidatas)
+# en base a RMSEIQR/CCC/QCOMHD. Dejar vacío para no exceptuar ninguna variable.
+# ------------------------------------------------------------------------------
+variables_sin_test_continuidad: []
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Período de retorno combinado (co-occurrence) para las cópulas finales.
+# Gráfico análogo a la Figura 7 de Chen et al. 2024: eje x = variable_x, eje y
+# = variable_y, contornos = años de retorno T = N/(n*(1-Fx-Fy+C(Fx,Fy))).
+# ------------------------------------------------------------------------------
+periodo_retorno:
+  niveles_anios: [2, 5, 10, 20, 50, 100, 200, 500]
+  resolucion_grilla: 100
+  # Cuanto extender la grilla mas alla del maximo observado, como fraccion
+  # del rango observado de cada variable (0 = no extender)
+  margen_grilla: 0.4
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
 # Número de series perturbadas a ser consideradas
 # ------------------------------------------------------------------------------
 n.series.perturbadas: 2
