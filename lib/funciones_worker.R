@@ -17,11 +17,26 @@ AplicarMejorAjusteACopulas <- function(input.value, script, copulas.ajustadas,
                          "n_serie = {ucs$n_serie}"))
   
   # Extraer la familia que mejor ajusta esta cópula
-  mejor_familia <- mejor.ajuste.multivariado %>% 
+  mejor_familia <- mejor.ajuste.multivariado %>%
     dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
                   variable_x == input.value$variable_x, variable_y == input.value$variable_y) %>%
     dplyr::pull(familia)
-  
+
+  # Si ninguna familia de cópula pudo ajustarse en ninguna serie perturbada
+  # (ej. dependencia no positiva, ver AjustarCopulas), mejor_familia queda NA:
+  # no hay nada que aplicar, se devuelve el resultado en NA en vez de romper
+  # mas adelante con do.call("NACopula", ...).
+  if (is.na(mejor_familia)) {
+    return(input.value %>%
+             dplyr::mutate(parametro_mejor_copula = NA_real_,
+                           mejor_copula = list(NA),
+                           mejor_ajuste_x_dist = NA_character_,
+                           mejor_ajuste_x_params = list(NA),
+                           mejor_ajuste_y_dist = NA_character_,
+                           mejor_ajuste_y_params = list(NA),
+                           ajuste_multivariado = list(NA)))
+  }
+
   # Se seleccionan las copulas que fueron ajustas utilizando la que resultó ser la mejor familia
   copulas_ajustadas_familia <- copulas.ajustadas %>%
     dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
@@ -98,15 +113,24 @@ MejorAjusteMultivariadoUC <- function(input.value, script, copulas.ajustadas, um
   # Se determinan las mátricas para la identificación de la cópula que mejor ajusta
   estadisticos <-  copulas_ajustadas_ubicacion %>% purrr::pmap_dfr(
     function(n_serie_perturbada, familia, bondad.ajuste, ...) {
-      return(tidyr::crossing(n_serie_perturbada = n_serie_perturbada, familia = familia, 
+      return(tidyr::crossing(n_serie_perturbada = n_serie_perturbada, familia = familia,
                              bondad.ajuste$estadisticos))
     })
-  metricas.ajuste.copula <- estadisticos %>%
-    dplyr::filter(., test != 'estimate') %>%
-    dplyr::group_by(familia, test) %>%
-    dplyr::summarise(., mediana = median(valor),
-                     media = mean(valor),
-                     sd = sd(valor)) 
+  # Si NINGUNA familia pudo ajustarse en NINGUNA serie perturbada (ej.
+  # dependencia no positiva en todas, ver AjustarCopulas), estadisticos no
+  # tiene ni siquiera la columna "test" (todas las filas vinieron de un
+  # bondad.ajuste$estadisticos = NULL): tratarlo como "no hay candidatas" en
+  # vez de romper el filter().
+  if (! "test" %in% names(estadisticos)) {
+    metricas.ajuste.copula <- estadisticos[0, ]
+  } else {
+    metricas.ajuste.copula <- estadisticos %>%
+      dplyr::filter(., test != 'estimate') %>%
+      dplyr::group_by(familia, test) %>%
+      dplyr::summarise(., mediana = median(valor),
+                       media = mean(valor),
+                       sd = sd(valor))
+  }
   
   # Inicializar objeto para guardar resultados
   mejor.ajuste <- tibble::tibble(
@@ -223,9 +247,25 @@ AjustarCopulas <- function(input.value, script, eventos.completos, umbral.p.valo
   # -----------------------------------------------------------------------------#
   # Paso 1: Realizar ajuste multivariado ----
   # -----------------------------------------------------------------------------#
-  # 
-  ajuste.copula <- do.call(what = vcu$funcion_ajuste, args = parametros)
-  
+  # Si el ajuste de esta familia falla para esta serie en particular (ej.
+  # stopifnot(tau > 0) cuando la dependencia no es positiva, o el parametro
+  # estimado cae fuera de su propio intervalo de confianza), no debe abortar
+  # todo el script: se atrapa el error, se informa como warning y se arma un
+  # resultado "sin ajuste" con la misma forma que devuelven las funciones
+  # AjustarCopula* cuando fallan internamente, para que TestearBondadAjusteCopulas
+  # lo trate como un ajuste fallido en vez de romper.
+  ajuste.copula <- tryCatch({
+    do.call(what = vcu$funcion_ajuste, args = parametros)
+  }, error = function(e) {
+    script$warn(glue::glue("Error al ajustar la cópula \"{vcu$familia}\" para ",
+                           "\"{vcu$variable_x}-{vcu$variable_y}\" (tipo_serie=\"{vcu$tipo_serie}\", ",
+                           "n_serie={vcu$n_serie}): {conditionMessage(e)}"))
+    list(familia = vcu$familia, copula = NA,
+        dependencia = list(tau.kendall = NA),
+        parametro = list(theta = NA),
+        bondad.ajuste = list(varianza = NA, loglike = NA))
+  })
+
   # ------------------------------------------------------------------------------
   
   
@@ -383,18 +423,24 @@ AplicarMejorAjusteASeriesPerturbadas <- function(input.value, script, series.per
   # Paso 1: Aplicar mejor ajuste univariado ----
   # -----------------------------------------------------------------------------#
   
-  # Ajustar distribucion univariada utilizando el mejor ajuste
+  # Ajustar distribucion univariada utilizando el mejor ajuste. Si el ajuste
+  # sobre esta serie perturbada en particular falla (ej. la MLE no converge
+  # para esta muestra puntual), no debe abortar todo el script: se atrapa el
+  # error, se informa como warning y se registra como "sin ajuste" (mismo
+  # formato que cuando no habia mejor_ajuste), y se sigue con el resto.
   if (is.na(input.value$mejor_ajuste)) {
     ajuste <- list(parametros = NA)
-  } else if (input.value$mejor_ajuste == 'lmomentos') {
-    # Ajuste por L-momentos
-    ajuste <- do.call(what = input.value$funcion_mejor_ajuste, 
-                      args = list(x.prima, min.cantidad.valores = 50))
-    
-  } else if (input.value$mejor_ajuste == 'maxima.verosimilitud')   { 
-    # Ajustar por Maxima Verosimilitud 
-    ajuste <- do.call(what = input.value$funcion_mejor_ajuste, 
-                      args = list(x.prima, min.cantidad.valores = 50))
+  } else if (input.value$mejor_ajuste %in% c('lmomentos', 'maxima.verosimilitud')) {
+    ajuste <- tryCatch({
+      do.call(what = input.value$funcion_mejor_ajuste,
+             args = list(x.prima, min.cantidad.valores = 50))
+    }, error = function(e) {
+      script$warn(glue::glue("Error al aplicar el mejor ajuste ({input.value$funcion_mejor_ajuste}) ",
+                             "a la serie perturbada (variable=\"{input.value$variable}\", ",
+                             "tipo_serie=\"{input.value$tipo_serie}\", n_serie={input.value$n_serie}): ",
+                             "{conditionMessage(e)}"))
+      list(parametros = NA)
+    })
   }
   
   # ------------------------------------------------------------------------------
