@@ -433,7 +433,7 @@ AplicarMejorAjusteASeriesPerturbadas <- function(input.value, script, series.per
   } else if (input.value$mejor_ajuste %in% c('lmomentos', 'maxima.verosimilitud')) {
     ajuste <- tryCatch({
       do.call(what = input.value$funcion_mejor_ajuste,
-             args = list(x.prima, min.cantidad.valores = 50))
+             args = list(x.prima, min.cantidad.valores = 30))
     }, error = function(e) {
       script$warn(glue::glue("Error al aplicar el mejor ajuste ({input.value$funcion_mejor_ajuste}) ",
                              "a la serie perturbada (variable=\"{input.value$variable}\", ",
@@ -536,8 +536,8 @@ AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.v
   configuracion <- uvd %>% 
     dplyr::select(distribucion, funcion_ajuste_lmomentos, funcion_ajuste_maxima_verosimilitud)
   
-  parametros.lmomentos            <- list(x = x, min.cantidad.valores = 50)
-  parametros.maxima.verosimilitud <- list(x = x, min.cantidad.valores = 50, numero.muestras = NULL)
+  parametros.lmomentos            <- list(x = x, min.cantidad.valores = 30)
+  parametros.maxima.verosimilitud <- list(x = x, min.cantidad.valores = 30, numero.muestras = NULL)
   
   ajuste.univariado <- AjusteUnivariadoConfig(x = x,
                                               umbral.p.valor = umbral.p.valor,
