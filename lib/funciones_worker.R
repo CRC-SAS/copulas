@@ -594,18 +594,36 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
   grid_x <- seq(rango_x[1], rango_x[2] + diff(rango_x) * margen.grilla, length.out = resolucion.grilla)
   grid_y <- seq(rango_y[1], rango_y[2] + diff(rango_y) * margen.grilla, length.out = resolucion.grilla)
 
-  grilla <- CalcularGrillaPeriodoRetorno(mv, N, n, grid_x, grid_y)
+  familia <- sub("Copula$", "", class(mv@copula))
 
-  familia   <- sub("Copula$", "", class(mv@copula))
-  id_valor  <- dplyr::pull(uc, !!id_column)
-  archivo_png <- glue::glue("{dir.salida.png}/periodo_retorno_{id_valor}_{uc$variable_x}_{uc$variable_y}.png")
-  titulo <- glue::glue("Período de retorno combinado - cópula {familia}\n",
-                       "{uc$variable_x}-{uc$variable_y} ({uc$nombre})")
+  # El ajuste multivariado puede existir (mv no es NA) pero tener parametro
+  # NA igual (ej. la familia ganadora solo ajusto en algunas series
+  # perturbadas y la seleccion de parametros termino apuntando a una de las
+  # que fallo). CalcularGrillaPeriodoRetorno llama a pCopula/probval.TVPACK,
+  # que abortan con error (no NA) si el parametro es NA. Igual que el resto
+  # del pipeline (ver fc17f05), un fallo puntual en una estacion+par no debe
+  # abortar todo el script: se atrapa, se informa como warning y esa fila
+  # se degrada a resultado NA (sin archivo_png ni grilla).
+  resultado <- tryCatch({
+    grilla <- CalcularGrillaPeriodoRetorno(mv, N, n, grid_x, grid_y)
 
-  GraficarPeriodoRetorno(grilla, niveles.anios, x_obs, y_obs,
-                         nombre_x = uc$variable_x, nombre_y = uc$variable_y,
-                         titulo = titulo, archivo_png = archivo_png)
+    id_valor  <- dplyr::pull(uc, !!id_column)
+    archivo_png <- glue::glue("{dir.salida.png}/periodo_retorno_{id_valor}_{uc$variable_x}_{uc$variable_y}.png")
+    titulo <- glue::glue("Período de retorno combinado - cópula {familia}\n",
+                         "{uc$variable_x}-{uc$variable_y} ({uc$nombre})")
+
+    GraficarPeriodoRetorno(grilla, niveles.anios, x_obs, y_obs,
+                           nombre_x = uc$variable_x, nombre_y = uc$variable_y,
+                           titulo = titulo, archivo_png = archivo_png)
+
+    list(archivo_png = archivo_png, grilla = grilla)
+  }, error = function(e) {
+    script$warn(glue::glue("Error al calcular el período de retorno para la cópula ",
+                           "\"{uc$variable_x}-{uc$variable_y}\" (familia=\"{familia}\"), ",
+                           "ubicación = {uc %>% dplyr::pull(!!id_column)}: {conditionMessage(e)}"))
+    list(archivo_png = NA_character_, grilla = NA)
+  })
 
   return(uc %>% dplyr::mutate(familia = familia, N = N, n = n,
-                              archivo_png = archivo_png, grilla = list(grilla)))
+                              archivo_png = resultado$archivo_png, grilla = list(resultado$grilla)))
 }
