@@ -71,6 +71,13 @@ periodo_retorno:
   # Cuanto extender la grilla mas alla del maximo observado, como fraccion
   # del rango observado de cada variable (0 = no extender)
   margen_grilla: 0.4
+  # Si es TRUE, ademas de la curva de periodo de retorno univariado (PASO 14)
+  # genera por cada estacion+variable un histograma de los eventos observados
+  # con la densidad de la distribucion ganadora superpuesta (analogo a la
+  # Figura 5 de Chen et al. 2024). FALSE por defecto: son 59 estaciones x 3
+  # variables = muchos PNG adicionales por corrida, se activa solo para
+  # validacion puntual.
+  graficar_distribucion_ajuste: FALSE
 # ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------

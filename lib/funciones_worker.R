@@ -648,7 +648,8 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
 
 
 CalcularPeriodoRetornoUV <- function(input.value, script, mejores.ajustes.univariados, eventos.completos,
-                                     niveles.anios, resolucion.grilla, margen.grilla, dir.salida.png) {
+                                     niveles.anios, resolucion.grilla, margen.grilla, dir.salida.png,
+                                     graficar.distribucion = FALSE) {
   # Ubicación y variable a analizar
   uv <- input.value
 
@@ -683,12 +684,13 @@ CalcularPeriodoRetornoUV <- function(input.value, script, mejores.ajustes.univar
   rango_x <- range(x_obs)
   grid_x <- seq(rango_x[1], rango_x[2] + diff(rango_x) * margen.grilla, length.out = resolucion.grilla)
 
+  id_valor <- dplyr::pull(uv, !!id_column)
+
   # Mismo criterio defensivo que CalcularPeriodoRetornoUC (ver fc17f05/373e1df):
   # un fallo puntual en una estacion+variable no debe abortar todo el script.
   resultado <- tryCatch({
     grilla <- CalcularGrillaPeriodoRetornoUV(distribucion, parametros, N, n, grid_x)
 
-    id_valor <- dplyr::pull(uv, !!id_column)
     archivo_png <- glue::glue("{dir.salida.png}/periodo_retorno_univariado_{id_valor}_{uv$variable}.png")
     titulo <- glue::glue("Período de retorno univariado - distribución {distribucion}\n",
                          "{uv$variable} ({uv$nombre})")
@@ -704,6 +706,30 @@ CalcularPeriodoRetornoUV <- function(input.value, script, mejores.ajustes.univar
     list(archivo_png = NA_character_, grilla = NA)
   })
 
+  # Grafico opcional (parametro periodo_retorno.graficar_distribucion_ajuste,
+  # ver 01_copulas.R): histograma de los eventos observados + densidad de la
+  # distribucion ganadora superpuesta, analogo a la Figura 5 de Chen et al.
+  # 2024. Independiente del calculo de T de arriba (tryCatch propio): que
+  # falle un grafico no debe tumbar el otro.
+  archivo_png_distribucion <- NA_character_
+  if (isTRUE(graficar.distribucion)) {
+    archivo_png_distribucion <- tryCatch({
+      archivo_png_dist <- glue::glue("{dir.salida.png}/distribucion_univariada_{id_valor}_{uv$variable}.png")
+      titulo_dist <- glue::glue("Distribución ajustada - {distribucion}\n{uv$variable} ({uv$nombre})")
+
+      GraficarDistribucionUnivariada(x_obs, distribucion, parametros, nombre_x = uv$variable,
+                                     titulo = titulo_dist, archivo_png = archivo_png_dist)
+
+      archivo_png_dist
+    }, error = function(e) {
+      script$warn(glue::glue("Error al graficar la distribución ajustada para la variable ",
+                             "\"{uv$variable}\" (distribución=\"{distribucion}\"), ",
+                             "ubicación = {uv %>% dplyr::pull(!!id_column)}: {conditionMessage(e)}"))
+      NA_character_
+    })
+  }
+
   return(uv %>% dplyr::mutate(distribucion = distribucion, N = N, n = n,
-                              archivo_png = resultado$archivo_png, grilla = list(resultado$grilla)))
+                              archivo_png = resultado$archivo_png, grilla = list(resultado$grilla),
+                              archivo_png_distribucion = archivo_png_distribucion))
 }

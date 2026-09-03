@@ -127,3 +127,32 @@ GraficarPeriodoRetornoUV <- function(grilla, niveles_anios, x_obs, N, n,
 
   ggplot2::ggsave(filename = archivo_png, plot = p, width = 7.5, height = 5.5, dpi = 150)
 }
+
+# ------------------------------------------------------------------------------#
+# ---- Grafico opcional (parametro periodo_retorno.graficar_distribucion_    ----
+# ---- ajuste): histograma de los eventos observados + densidad de la        ----
+# ---- distribucion ganadora superpuesta, analogo a la Figura 5 de           ----
+# ---- Chen et al. 2024                                                      ----
+# ------------------------------------------------------------------------------#
+
+GraficarDistribucionUnivariada <- function(x_obs, distribucion, parametros,
+                                           nombre_x, titulo, archivo_png) {
+  observados <- tibble::tibble(x = x_obs)
+  densidad <- function(x) do.call(what = paste0("d", distribucion), args = c(list(x = x), parametros))
+
+  p <- ggplot2::ggplot(observados, ggplot2::aes(x = x)) +
+    ggplot2::geom_histogram(ggplot2::aes(y = ggplot2::after_stat(density)),
+                            bins = 15, fill = "steelblue3", color = "white", alpha = 0.7) +
+    ggplot2::stat_function(fun = densidad, color = "steelblue4", linewidth = 0.9) +
+    ggplot2::labs(x = nombre_x, y = "Densidad", title = titulo) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(plot.title = ggplot2::element_text(face = "bold"))
+
+  # Misma razon que en las demas funciones de graficacion: duracion es
+  # conceptualmente entera (dias), forzar breaks enteros si corresponde.
+  if (identical(nombre_x, "duracion")) {
+    p <- p + ggplot2::scale_x_continuous(breaks = seq(floor(min(x_obs)), ceiling(max(x_obs)), by = 1))
+  }
+
+  ggplot2::ggsave(filename = archivo_png, plot = p, width = 7.5, height = 5.5, dpi = 150)
+}

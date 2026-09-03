@@ -1044,7 +1044,8 @@ if (nrow(periodo_retorno_univariado_input) == 0) {
                                          niveles.anios = config$params$periodo_retorno$niveles_anios,
                                          resolucion.grilla = config$params$periodo_retorno$resolucion_grilla,
                                          margen.grilla = config$params$periodo_retorno$margen_grilla,
-                                         dir.salida.png = glue::glue("{config$dir$data}/output"))
+                                         dir.salida.png = glue::glue("{config$dir$data}/output"),
+                                         graficar.distribucion = isTRUE(config$params$periodo_retorno$graficar_distribucion_ajuste))
 
   # Transformar resultados a un objeto de tipo tibble
   periodo.retorno.univariado <- periodo.retorno.univariado %>% purrr::map_dfr(~.x)
