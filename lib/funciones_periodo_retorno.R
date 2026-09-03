@@ -11,6 +11,20 @@
 # objeto mvdc (copula + ambas marginales) ya calculado por el pipeline.
 
 CalcularGrillaPeriodoRetorno <- function(mvdc, N, n, grid_x, grid_y) {
+  # La familia ganadora puede tener parametro NA (ver AplicarMejorAjusteACopulas
+  # / fc17f05 / 373e1df). Para clayton/normal/t, pCopula/pMvdc abortan con
+  # error ante un parametro NA (queda atrapado por el tryCatch del caller,
+  # se degrada a archivo_png=NA como corresponde). Para joe/gumbel, en cambio,
+  # pMvdc devuelve NaN en silencio en vez de abortar: sin este chequeo
+  # explicito, la grilla completa queda en NA pero NO se detecta como error,
+  # y se termina generando un PNG "valido" en apariencia (con titulo y
+  # familia) pero con el heatmap/isolineas completamente vacios. Se fuerza
+  # el mismo tratamiento (stop(), atrapado por el caller) para todas las
+  # familias por igual.
+  if (any(is.na(mvdc@copula@parameters))) {
+    stop("parameter is NA")
+  }
+
   grilla <- tidyr::crossing(x = grid_x, y = grid_y)
 
   F_X  <- do.call(what = paste0("p", mvdc@margins[1]), args = c(list(q = grilla$x), mvdc@paramMargins[[1]]))
@@ -20,6 +34,13 @@ CalcularGrillaPeriodoRetorno <- function(mvdc, N, n, grid_x, grid_y) {
   # P(X>=x, Y>=y), acotada para evitar T infinito/negativo por errores de redondeo
   prob_conjunta <- pmax(1 - F_X - F_Y + F_XY, 1e-6)
   grilla$T <- N / (n * prob_conjunta)
+
+  # Red de seguridad adicional: si por cualquier otra razon (no solo
+  # parametro NA) la grilla entera queda sin valores validos, tratarlo
+  # tambien como fallo en vez de dejar pasar un grafico vacio.
+  if (all(is.na(grilla$T))) {
+    stop("todos los valores de T resultaron NA/NaN")
+  }
 
   return(grilla)
 }
