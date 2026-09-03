@@ -28,7 +28,16 @@ GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs,
                                     nombre_x, nombre_y, titulo, archivo_png) {
   grid_x <- sort(unique(grilla$x))
   grid_y <- sort(unique(grilla$y))
-  T_mat  <- matrix(grilla$T, nrow = length(grid_x), ncol = length(grid_y))
+
+  # Construccion de T_mat indexando por posicion (match), no por orden de
+  # filas de grilla: asumir que grilla esta ordenada como un crossing(x, y)
+  # con x variando mas lento (lo que matrix(grilla$T, nrow=, ncol=) requeria)
+  # es fragil, y de hecho estaba mal (quedaba transpuesta) cuando la funcion
+  # de graficacion recibe una tabla con las columnas x/y ya intercambiadas
+  # (ver CalcularPeriodoRetornoUC, inversion de eje para "duracion"). Con
+  # match() la matriz queda correcta sin importar el orden de filas de grilla.
+  T_mat <- matrix(NA_real_, nrow = length(grid_x), ncol = length(grid_y))
+  T_mat[cbind(match(grilla$x, grid_x), match(grilla$y, grid_y))] <- grilla$T
 
   # Posicion de las etiquetas de cada curva de nivel: punto medio de cada linea
   lineas <- grDevices::contourLines(grid_x, grid_y, T_mat, levels = niveles_anios)
