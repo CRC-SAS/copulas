@@ -645,3 +645,65 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
   return(uc %>% dplyr::mutate(familia = familia, N = N, n = n,
                               archivo_png = resultado$archivo_png, grilla = list(resultado$grilla)))
 }
+
+
+CalcularPeriodoRetornoUV <- function(input.value, script, mejores.ajustes.univariados, eventos.completos,
+                                     niveles.anios, resolucion.grilla, margen.grilla, dir.salida.png) {
+  # Ubicación y variable a analizar
+  uv <- input.value
+
+  # Identificar la columna con el id de la ubicación (usualmente station_id, o point_id)
+  id_column <- IdentificarIdColumn(uv)
+
+  # Informar estado de la ejecución
+  script$info(glue::glue("Calculando período de retorno univariado para la variable \"{uv$variable}\", ",
+                         "ubicación = {uv %>% dplyr::pull(!!id_column)}"))
+
+  # Obtener la distribucion+parametros del mejor ajuste univariado ya calculado (PASO 6)
+  ajuste <- mejores.ajustes.univariados %>%
+    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(uv, !!id_column), variable == uv$variable)
+  distribucion <- ajuste$distribucion
+  parametros <- ajuste$parametros[[1]]
+
+  # Serie observada (sin perturbar) para esta ubicación+variable: da n
+  # (cantidad de eventos), N (extension del registro en anios) y los puntos
+  # a graficar en posicion Weibull
+  eventos_ubic <- eventos.completos %>%
+    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(uv, !!id_column),
+                  variable == uv$variable, tipo_serie == "observada")
+
+  fechas <- eventos_ubic %>% dplyr::pull(fecha_inicio)
+  n <- length(fechas)
+  N <- as.numeric(diff(range(fechas))) / 365.25
+
+  x_obs <- eventos_ubic %>% dplyr::pull(valor)
+
+  # Grilla de evaluacion: desde el minimo observado hasta el maximo observado
+  # + un margen (fraccion del rango observado), igual criterio que el caso bivariado
+  rango_x <- range(x_obs)
+  grid_x <- seq(rango_x[1], rango_x[2] + diff(rango_x) * margen.grilla, length.out = resolucion.grilla)
+
+  # Mismo criterio defensivo que CalcularPeriodoRetornoUC (ver fc17f05/373e1df):
+  # un fallo puntual en una estacion+variable no debe abortar todo el script.
+  resultado <- tryCatch({
+    grilla <- CalcularGrillaPeriodoRetornoUV(distribucion, parametros, N, n, grid_x)
+
+    id_valor <- dplyr::pull(uv, !!id_column)
+    archivo_png <- glue::glue("{dir.salida.png}/periodo_retorno_univariado_{id_valor}_{uv$variable}.png")
+    titulo <- glue::glue("Período de retorno univariado - distribución {distribucion}\n",
+                         "{uv$variable} ({uv$nombre})")
+
+    GraficarPeriodoRetornoUV(grilla, niveles.anios, x_obs, N, n,
+                             nombre_x = uv$variable, titulo = titulo, archivo_png = archivo_png)
+
+    list(archivo_png = archivo_png, grilla = grilla)
+  }, error = function(e) {
+    script$warn(glue::glue("Error al calcular el período de retorno univariado para la variable ",
+                           "\"{uv$variable}\" (distribución=\"{distribucion}\"), ",
+                           "ubicación = {uv %>% dplyr::pull(!!id_column)}: {conditionMessage(e)}"))
+    list(archivo_png = NA_character_, grilla = NA)
+  })
+
+  return(uv %>% dplyr::mutate(distribucion = distribucion, N = N, n = n,
+                              archivo_png = resultado$archivo_png, grilla = list(resultado$grilla)))
+}

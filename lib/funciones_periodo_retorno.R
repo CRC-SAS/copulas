@@ -80,3 +80,50 @@ GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs,
 
   ggplot2::ggsave(filename = archivo_png, plot = p, width = 7.5, height = 5.5, dpi = 150)
 }
+
+# ------------------------------------------------------------------------------#
+# ---- Funciones para el periodo de retorno univariado de una variable       ----
+# ---- individual (intensidad/magnitud/duracion), analogo al caso bivariado  ----
+# ---- de arriba pero con una sola marginal                                  ----
+# ------------------------------------------------------------------------------#
+#
+# Formula: T(x) = N / (n * (1 - F(x))), donde F es la distribucion ganadora
+# del mejor ajuste univariado (PASO 6) para esa estacion+variable.
+
+CalcularGrillaPeriodoRetornoUV <- function(distribucion, parametros, N, n, grid_x) {
+  F_X <- do.call(what = paste0("p", distribucion), args = c(list(q = grid_x), parametros))
+
+  # P(X>=x), acotada para evitar T infinito/negativo por errores de redondeo
+  prob_excedencia <- pmax(1 - F_X, 1e-6)
+  grilla <- tibble::tibble(x = grid_x, T = N / (n * prob_excedencia))
+
+  return(grilla)
+}
+
+GraficarPeriodoRetornoUV <- function(grilla, niveles_anios, x_obs, N, n,
+                                     nombre_x, titulo, archivo_png) {
+  # Posicion de graficacion empirica (Weibull) de los eventos observados: para
+  # el evento de rango m (1 = valor mas alto, hasta n), T_empirico = N*(n+1)/(n*m).
+  # No se usa la F teorica para no forzar que caigan siempre exactos sobre la
+  # curva: la distancia entre puntos y curva es la senal visual de bondad de ajuste.
+  m <- rank(-x_obs)
+  observados <- tibble::tibble(T = N * (n + 1) / (n * m), x = x_obs)
+
+  p <- ggplot2::ggplot(grilla, ggplot2::aes(x = T, y = x)) +
+    ggplot2::geom_vline(xintercept = niveles_anios, color = "gray80", linewidth = 0.3) +
+    ggplot2::geom_line(color = "steelblue4", linewidth = 0.8) +
+    ggplot2::geom_point(data = observados, ggplot2::aes(x = T, y = x),
+                        shape = 21, fill = "white", color = "black", size = 1.8) +
+    ggplot2::scale_x_log10(breaks = niveles_anios, labels = niveles_anios) +
+    ggplot2::labs(x = "Período de retorno (años)", y = nombre_x, title = titulo) +
+    ggplot2::theme_minimal(base_size = 12) +
+    ggplot2::theme(plot.title = ggplot2::element_text(face = "bold"))
+
+  # Misma razon que en GraficarPeriodoRetorno: duracion es conceptualmente
+  # entera (dias), forzar breaks enteros en el eje de valores si corresponde.
+  if (identical(nombre_x, "duracion")) {
+    p <- p + ggplot2::scale_y_continuous(breaks = seq(floor(min(grilla$x)), ceiling(max(grilla$x)), by = 1))
+  }
+
+  ggplot2::ggsave(filename = archivo_png, plot = p, width = 7.5, height = 5.5, dpi = 150)
+}

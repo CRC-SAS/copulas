@@ -987,6 +987,92 @@ if (nrow(periodo_retorno_input) == 0) {
 
 
 # -----------------------------------------------------------------------------#
+# --- PASO 14. Calcular el período de retorno univariado (una sola marginal)
+# --- para cada variable individual (intensidad, magnitud, duracion) con
+# --- mejor ajuste univariado ya calculado (PASO 6), y generar un gráfico
+# --- T-vs-valor por cada estación+variable con los eventos observados
+# --- superpuestos en posición de graficación empírica (Weibull). Fórmula:
+# --- T(x) = N / (n*(1 - F(x)))
+# -----------------------------------------------------------------------------#
+
+# Definir el objeto sobre el cual iterar: una fila por estación+variable con
+# mejor ajuste univariado válido. "nombre" se perdió al construir
+# ubicacion_x_variable en el PASO 6 (solo seleccionaba id+variable), se
+# recupera acá desde la tabla de ajustes univariados de esa misma etapa.
+periodo_retorno_univariado_input <- mejor.ajuste.univariado.x.ubic.var %>%
+  dplyr::filter(!is.na(distribucion)) %>%
+  dplyr::select(!!id_column, variable) %>%
+  dplyr::left_join(ajuste.univariado.x.ubic.var.dist %>%
+                     dplyr::select(!!id_column, nombre) %>% dplyr::distinct(),
+                   by = id_column)
+
+if (nrow(periodo_retorno_univariado_input) == 0) {
+  script$warn("Ninguna variable tiene ajuste univariado válido: se omite el cálculo de período de retorno univariado")
+} else {
+  # Definir el nombre de la función a ser paralelizada
+  function_name <- "CalcularPeriodoRetornoUV"
+
+  # Definir nombre de archivos .log y .out de corridas anteriores
+  task_logfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.log")
+  task_outfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.out")
+
+  # Borrar archivos .log y .out de corridas anteriores
+  if (file.exists(task_logfile))
+    file.remove(task_logfile)
+  if (file.exists(task_outfile))
+    file.remove(task_outfile)
+
+  # Definir nombre del archivo donde se van a guardar los resultados
+  results_filename <- glue::glue("{config$dir$data}/{config$files$copulas$periodo_retorno_univariado}")
+
+  # Borrar archivo de resultado de corridas anteriores
+  if (file.exists(results_filename))
+    file.remove(results_filename)
+
+  # Crear tarea distribuida y ejecutarla
+  task <- Task$new(parent.script = script,
+                   func.name = function_name,
+                   packages = list.of.packages)
+
+  # Informar inicio de ejecución
+  script$info("Calculando período de retorno univariado para cada variable")
+  # Ejecutar tarea distribuida
+  periodo.retorno.univariado <- task$run(number.of.processes = config$max.procesos,
+                                         input.values = periodo_retorno_univariado_input,
+                                         mejores.ajustes.univariados = mejor.ajuste.univariado.x.ubic.var,
+                                         eventos.completos = eventos_completos,
+                                         niveles.anios = config$params$periodo_retorno$niveles_anios,
+                                         resolucion.grilla = config$params$periodo_retorno$resolucion_grilla,
+                                         margen.grilla = config$params$periodo_retorno$margen_grilla,
+                                         dir.salida.png = glue::glue("{config$dir$data}/output"))
+
+  # Transformar resultados a un objeto de tipo tibble
+  periodo.retorno.univariado <- periodo.retorno.univariado %>% purrr::map_dfr(~.x)
+
+  # Agregar log de la tarea al log del script
+  file.append(script_logfile, task_logfile)
+
+  # Si hay errores, terminar ejecucion
+  task.errors <- task$getErrors()
+  if (length(task.errors) > 0) {
+    for (error.obj in task.errors) {
+      id_column <- IdentificarIdColumn(periodo_retorno_univariado_input[1,])
+      script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
+                             "variable=\"{error.obj$input.value[['variable']]}\")",
+                             ": {error.obj$error}"))
+    }
+    script$error("Finalizando script de forma ANORMAL")
+  } else {
+    # Guardar resultados en un archivo fácil de compartir
+    script$info(glue::glue("Guardando período de retorno univariado en el archivo {results_filename}"))
+    base::saveRDS(periodo.retorno.univariado, results_filename)
+  }
+}
+
+# ------------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------#
 # --- PASO XX. Finalizar script ----
 # -----------------------------------------------------------------------------#
 
