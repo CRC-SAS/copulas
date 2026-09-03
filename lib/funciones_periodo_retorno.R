@@ -140,16 +140,33 @@ GraficarDistribucionUnivariada <- function(x_obs, distribucion, parametros,
   observados <- tibble::tibble(x = x_obs)
   densidad <- function(x) do.call(what = paste0("d", distribucion), args = c(list(x = x), parametros))
 
-  p <- ggplot2::ggplot(observados, ggplot2::aes(x = x)) +
+  # Duracion es conceptualmente entera (dias): un bins=N generico calcula el
+  # ancho de bin como rango/(N-1), que solo por casualidad coincide con un
+  # ancho que alinee los bins a los enteros (depende de que el rango
+  # observado en esa estacion sea multiplo de ese ancho). Si no coincide, las
+  # barras quedan visualmente corridas respecto de los enteros del eje (breaks
+  # forzados mas abajo), aunque el eje si este alineado. Se fuerza en cambio
+  # binwidth=1 con boundary=0.5, que garantiza un bin por cada entero sin
+  # importar el rango de cada estacion. Para intensidad/magnitud (continuas)
+  # se mantiene el bins=15 generico.
+  histograma <- if (identical(nombre_x, "duracion")) {
     ggplot2::geom_histogram(ggplot2::aes(y = ggplot2::after_stat(density)),
-                            bins = 15, fill = "steelblue3", color = "white", alpha = 0.7) +
+                            binwidth = 1, boundary = 0.5,
+                            fill = "steelblue3", color = "white", alpha = 0.7)
+  } else {
+    ggplot2::geom_histogram(ggplot2::aes(y = ggplot2::after_stat(density)),
+                            bins = 15, fill = "steelblue3", color = "white", alpha = 0.7)
+  }
+
+  p <- ggplot2::ggplot(observados, ggplot2::aes(x = x)) +
+    histograma +
     ggplot2::stat_function(fun = densidad, color = "steelblue4", linewidth = 0.9) +
     ggplot2::labs(x = nombre_x, y = "Densidad", title = titulo) +
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(plot.title = ggplot2::element_text(face = "bold"))
 
-  # Misma razon que en las demas funciones de graficacion: duracion es
-  # conceptualmente entera (dias), forzar breaks enteros si corresponde.
+  # Misma razon que en las demas funciones de graficacion: forzar breaks
+  # enteros en el eje si corresponde.
   if (identical(nombre_x, "duracion")) {
     p <- p + ggplot2::scale_x_continuous(breaks = seq(floor(min(x_obs)), ceiling(max(x_obs)), by = 1))
   }
