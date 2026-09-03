@@ -612,8 +612,26 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
     titulo <- glue::glue("Período de retorno combinado - cópula {familia}\n",
                          "{uc$variable_x}-{uc$variable_y} ({uc$nombre})")
 
-    GraficarPeriodoRetorno(grilla, niveles.anios, x_obs, y_obs,
-                           nombre_x = uc$variable_x, nombre_y = uc$variable_y,
+    # La copula se ajusta y la grilla se calcula siempre respetando el orden
+    # variable_x/variable_y tal cual quedo fijado en variables_copulas (ese
+    # orden es el que importa para el ajuste del mvdc, no se toca). Para el
+    # grafico, en cambio, se prefiere mostrar siempre "duracion" en el eje X
+    # cuando participa del par: si aca quedo en variable_y, se invierten
+    # unicamente las columnas de graficacion (la grilla/x_obs/y_obs/nombres
+    # que se le pasan a GraficarPeriodoRetorno), sin re-ajustar nada.
+    invertir_grafico <- identical(uc$variable_y, "duracion") && !identical(uc$variable_x, "duracion")
+    if (invertir_grafico) {
+      grilla_graf <- grilla %>% dplyr::rename(x = y, y = x)
+      x_obs_graf <- y_obs; y_obs_graf <- x_obs
+      nombre_x_graf <- uc$variable_y; nombre_y_graf <- uc$variable_x
+    } else {
+      grilla_graf <- grilla
+      x_obs_graf <- x_obs; y_obs_graf <- y_obs
+      nombre_x_graf <- uc$variable_x; nombre_y_graf <- uc$variable_y
+    }
+
+    GraficarPeriodoRetorno(grilla_graf, niveles.anios, x_obs_graf, y_obs_graf,
+                           nombre_x = nombre_x_graf, nombre_y = nombre_y_graf,
                            titulo = titulo, archivo_png = archivo_png)
 
     list(archivo_png = archivo_png, grilla = grilla)

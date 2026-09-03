@@ -61,6 +61,17 @@ GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs,
     ggplot2::theme_minimal(base_size = 12) +
     ggplot2::theme(plot.title = ggplot2::element_text(face = "bold"))
 
+  # La duracion es conceptualmente entera (dias), pero se trata como continua
+  # en la grilla de evaluacion: sin esto, los breaks automaticos de ggplot
+  # eligen incrementos "redondos" (2.5, 7.5, ...) que no tienen sentido para
+  # una duracion. Se fuerza a mostrar todos los enteros del rango graficado.
+  if (identical(nombre_x, "duracion")) {
+    p <- p + ggplot2::scale_x_continuous(breaks = seq(floor(min(grid_x)), ceiling(max(grid_x)), by = 1))
+  }
+  if (identical(nombre_y, "duracion")) {
+    p <- p + ggplot2::scale_y_continuous(breaks = seq(floor(min(grid_y)), ceiling(max(grid_y)), by = 1))
+  }
+
   if (nrow(etiquetas) > 0) {
     p <- p + ggplot2::geom_label(data = etiquetas, ggplot2::aes(x = x, y = y, label = nivel),
                                  size = 3, linewidth = 0, label.padding = ggplot2::unit(0.12, "lines"),
