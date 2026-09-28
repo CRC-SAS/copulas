@@ -2,6 +2,24 @@
 # ---- Funciones para el periodo de retorno combinado (co-occurrence) de una ----
 # ---- copula ya ajustada, analogo a la Figura 7 de Chen et al. 2024         ----
 # ------------------------------------------------------------------------------#
+
+# Paleta divergente rojo (Nino) <-> azul (Nina) con gris neutro, usada para
+# colorear el relleno de los puntos observados en GraficarPeriodoRetorno segun
+# el evento ENSO vigente al inicio de cada evento. Validada con el script de
+# validacion de paletas (separacion CVD/vision normal >= umbral entre las
+# ramas roja y azul, y del gris contra ambas; rampas monotonas en luminosidad
+# dentro de cada rama) - ver docs/superpowers si se necesita regenerar.
+COLORES_ENSO <- c(
+  "Niño Muy Fuerte" = "#a50f15",
+  "Niño Fuerte"     = "#de2d26",
+  "Niño Moderado"   = "#fb6a4a",
+  "Niño Débil" = "#fcae91",
+  "Neutro"               = "#7f7f7f",
+  "Niña Débil" = "#bdd7e7",
+  "Niña Moderada"   = "#6baed6",
+  "Niña Fuerte"     = "#08519c"
+)
+NIVELES_ENSO <- names(COLORES_ENSO)
 #
 # Formula (caso AND / co-occurrence, ambas variables superan simultaneamente
 # el umbral x,y):
@@ -45,7 +63,7 @@ CalcularGrillaPeriodoRetorno <- function(mvdc, N, n, grid_x, grid_y) {
   return(grilla)
 }
 
-GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs,
+GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs, enso_obs,
                                     nombre_x, nombre_y, titulo, archivo_png) {
   grid_x <- sort(unique(grilla$x))
   grid_y <- sort(unique(grilla$y))
@@ -67,20 +85,35 @@ GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs,
     tibble::tibble(nivel = l$level, x = l$x[medio], y = l$y[medio])
   })
 
-  observados <- tibble::tibble(x = x_obs, y = y_obs)
+  # evento_enso puede venir NA (indeterminado, fecha_inicio fuera del rango
+  # del archivo ENSO) - se factoriza con todos los niveles conocidos para que
+  # la leyenda muestre siempre el mismo orden/colores entre graficos, y solo
+  # aparezca la entrada "NA" si realmente hay algun punto sin clasificar.
+  observados <- tibble::tibble(x = x_obs, y = y_obs,
+                               evento_enso = factor(enso_obs, levels = NIVELES_ENSO))
 
   p <- ggplot2::ggplot(grilla, ggplot2::aes(x = x, y = y)) +
     ggplot2::geom_raster(ggplot2::aes(fill = T), interpolate = TRUE) +
     ggplot2::geom_contour(ggplot2::aes(z = T), breaks = niveles_anios,
                           color = "white", linewidth = 0.4) +
-    ggplot2::geom_point(data = observados, ggplot2::aes(x = x, y = y),
-                        shape = 21, fill = "white", color = "black", size = 1.8) +
     ggplot2::scale_fill_viridis_c(trans = "log10", breaks = niveles_anios,
                                   limits = range(niveles_anios), oob = scales::squish,
                                   name = "Período de\nretorno (años)") +
+    # El heatmap de arriba ya usa la estetica "fill" (escala continua viridis);
+    # ggnewscale permite una segunda escala "fill" independiente para los
+    # puntos observados (escala discreta ENSO), en vez de compartir una sola
+    # escala de fill para todo el grafico
+    ggnewscale::new_scale_fill() +
+    ggplot2::geom_point(data = observados, ggplot2::aes(x = x, y = y, fill = evento_enso),
+                        shape = 21, color = "black", size = 1.8, stroke = 0.4) +
+    ggplot2::scale_fill_manual(values = COLORES_ENSO, breaks = NIVELES_ENSO,
+                               name = "Evento ENSO\n(al inicio del evento)",
+                               na.value = "white", drop = TRUE,
+                               guide = ggplot2::guide_legend(nrow = 2, byrow = TRUE)) +
     ggplot2::labs(x = nombre_x, y = nombre_y, title = titulo) +
     ggplot2::theme_minimal(base_size = 12) +
-    ggplot2::theme(plot.title = ggplot2::element_text(face = "bold"))
+    ggplot2::theme(plot.title = ggplot2::element_text(face = "bold"),
+                  legend.position = "bottom", legend.box = "vertical")
 
   # La duracion es conceptualmente entera (dias), pero se trata como continua
   # en la grilla de evaluacion: sin esto, los breaks automaticos de ggplot

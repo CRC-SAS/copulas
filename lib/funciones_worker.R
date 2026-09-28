@@ -585,6 +585,9 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
 
   x_obs <- eventos_ubic %>% dplyr::filter(variable == uc$variable_x) %>% dplyr::pull(valor)
   y_obs <- eventos_ubic %>% dplyr::filter(variable == uc$variable_y) %>% dplyr::pull(valor)
+  # evento_enso es un atributo por evento (no por variable): se toma del mismo
+  # subconjunto/orden que x_obs, con el que queda alineado fila a fila
+  enso_obs <- eventos_ubic %>% dplyr::filter(variable == uc$variable_x) %>% dplyr::pull(evento_enso)
 
   # Grilla de evaluacion: desde el minimo observado hasta el maximo observado
   # + un margen (fraccion del rango observado), para poder ver isolineas mas
@@ -630,7 +633,7 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
       nombre_x_graf <- uc$variable_x; nombre_y_graf <- uc$variable_y
     }
 
-    GraficarPeriodoRetorno(grilla_graf, niveles.anios, x_obs_graf, y_obs_graf,
+    GraficarPeriodoRetorno(grilla_graf, niveles.anios, x_obs_graf, y_obs_graf, enso_obs,
                            nombre_x = nombre_x_graf, nombre_y = nombre_y_graf,
                            titulo = titulo, archivo_png = archivo_png)
 

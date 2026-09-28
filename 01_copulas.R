@@ -8,7 +8,7 @@ list.of.packages <- c("dplyr", "purrr", "lubridate", "magrittr",
                       "lmomco", "stringr", "utils", "yaml", "goftest",
                       "WRS2", "futile.logger", "doSNOW", "foreach", 
                       "iterators", "snow", "yardstick", "hydroGOF", 
-                      "copula", "ggplot2", "R6", "RPostgres")
+                      "copula", "ggplot2", "ggnewscale", "R6", "RPostgres")
 for (pack in list.of.packages) {
   if (!require(pack, character.only = TRUE)) {
     stop(paste0("Paquete no encontrado: ", pack))
@@ -112,6 +112,7 @@ source(glue::glue("{config$dir$base}/lib/funciones_periodo_retorno.R"), echo = F
 source(glue::glue("{config$dir$base}/lib/funciones_mejor_ajuste_copula.R"), echo = FALSE)
 source(glue::glue("{config$dir$base}/lib/funciones_auxiliares.R"), echo = FALSE)
 source(glue::glue("{config$dir$base}/lib/funciones_worker.R"), echo = FALSE)
+source(glue::glue("{config$dir$base}/lib/funciones_enso.R"), echo = FALSE)
 
 
 # c.1) Definir nombre del script
@@ -182,6 +183,14 @@ eventos <- data.table::fread(glue::glue("{config$dir$data}/{config$files$eventos
                 fecha_fin = as.Date(fecha_fin),
                 referencia_comienzo = as.Date(referencia_comienzo),
                 referencia_fin = as.Date(referencia_fin))
+
+# Enriquecer los eventos con el evento ENSO (Nino/Nina/Neutro/indeterminado)
+# correspondiente al mes en el que comenzo cada uno
+eventos_enso <- LeerEventosEnso(glue::glue("{config$dir$data}/{config$files$eventos_enso}"))
+clasificacion_enso <- ClasificarMesesEnso(eventos_enso)
+eventos <- eventos %>%
+  dplyr::mutate(evento_enso = AsignarEventoEnso(fecha_inicio, clasificacion_enso))
+
 id_column <- IdentificarIdColumn(eventos)
 # Controlar que eventos tenga un id identificable
 if (! any(c("station_id", "point_id") %in% colnames(eventos)))
@@ -226,8 +235,8 @@ if (!all(union(variables_copulas$variable_x, variables_copulas$variable_y) %in% 
 serie_observada <- eventos %>%
   dplyr::mutate(intensidad = abs(intensidad), magnitud = abs(magnitud),
                 duracion = abs(duracion), minimo = abs(minimo), maximo = abs(maximo)) %>%
-  dplyr::select(realizacion, !!id_column, tipo_evento, conf_id, numero_evento, 
-                fecha_inicio, intensidad, magnitud, duracion, minimo, maximo) %>%
+  dplyr::select(realizacion, !!id_column, tipo_evento, conf_id, numero_evento,
+                fecha_inicio, evento_enso, intensidad, magnitud, duracion, minimo, maximo) %>%
   tidyr::pivot_longer(cols = c(intensidad, magnitud, duracion, minimo, maximo),
                       names_to = "variable", values_to = "valor") %>%
   dplyr::mutate(tipo_serie = "observada", n_serie = 0) %>% 

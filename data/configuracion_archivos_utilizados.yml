@@ -15,6 +15,13 @@ eventos_identificados: "input/eventos_identificados_unconditional.csv"
 # ----------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------
+# Archivo con los eventos ENSO (RONI trimestral solapado) utilizados para
+# clasificar el evento ENSO correspondiente al inicio de cada evento.
+# ----------------------------------------------------------------------------
+eventos_enso: "input/enso_roni.txt"
+# ----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
 # Archivos con datos generados por el proceso de análisis de cópulas
 # ----------------------------------------------------------------------------
 copulas:
