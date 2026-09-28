@@ -1,0 +1,247 @@
+
+
+# ------------------------------------------------------------------------------
+# ARCHIVO LOCAL DE PRUEBA (no versionado) — generado a partir de Olas.rds
+# convertido a data/input/eventos_identificados_unconditional.csv /
+# eventos_identificados_frio_calor.csv (6 tipos de evento, ver
+# pruebas/convertir_olas_frio_calor.R y pruebas/correr_18_escenarios.sh)
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Definicion de ubicaciones de prueba para diagnosticos
+# ------------------------------------------------------------------------------
+ubicaciones:
+  - { id: "87007", nombre: "Estacion 87007" }
+  - { id: "87016", nombre: "Estacion 87016" }
+  - { id: "87046", nombre: "Estacion 87046" }
+  - { id: "87047", nombre: "Estacion 87047" }
+  - { id: "87078", nombre: "Estacion 87078" }
+  - { id: "87097", nombre: "Estacion 87097" }
+  - { id: "87121", nombre: "Estacion 87121" }
+  - { id: "87129", nombre: "Estacion 87129" }
+  - { id: "87148", nombre: "Estacion 87148" }
+  - { id: "87155", nombre: "Estacion 87155" }
+  - { id: "87162", nombre: "Estacion 87162" }
+  - { id: "87163", nombre: "Estacion 87163" }
+  - { id: "87166", nombre: "Estacion 87166" }
+  - { id: "87178", nombre: "Estacion 87178" }
+  - { id: "87217", nombre: "Estacion 87217" }
+  - { id: "87222", nombre: "Estacion 87222" }
+  - { id: "87257", nombre: "Estacion 87257" }
+  - { id: "87270", nombre: "Estacion 87270" }
+  - { id: "87289", nombre: "Estacion 87289" }
+  - { id: "87311", nombre: "Estacion 87311" }
+  - { id: "87320", nombre: "Estacion 87320" }
+  - { id: "87328", nombre: "Estacion 87328" }
+  - { id: "87344", nombre: "Estacion 87344" }
+  - { id: "87345", nombre: "Estacion 87345" }
+  - { id: "87349", nombre: "Estacion 87349" }
+  - { id: "87371", nombre: "Estacion 87371" }
+  - { id: "87374", nombre: "Estacion 87374" }
+  - { id: "87393", nombre: "Estacion 87393" }
+  - { id: "87395", nombre: "Estacion 87395" }
+  - { id: "87416", nombre: "Estacion 87416" }
+  - { id: "87418", nombre: "Estacion 87418" }
+  - { id: "87420", nombre: "Estacion 87420" }
+  - { id: "87436", nombre: "Estacion 87436" }
+  - { id: "87448", nombre: "Estacion 87448" }
+  - { id: "87453", nombre: "Estacion 87453" }
+  - { id: "87467", nombre: "Estacion 87467" }
+  - { id: "87480", nombre: "Estacion 87480" }
+  - { id: "87497", nombre: "Estacion 87497" }
+  - { id: "87506", nombre: "Estacion 87506" }
+  - { id: "87509", nombre: "Estacion 87509" }
+  - { id: "87532", nombre: "Estacion 87532" }
+  - { id: "87534", nombre: "Estacion 87534" }
+  - { id: "87544", nombre: "Estacion 87544" }
+  - { id: "87548", nombre: "Estacion 87548" }
+  - { id: "87550", nombre: "Estacion 87550" }
+  - { id: "87563", nombre: "Estacion 87563" }
+  - { id: "87569", nombre: "Estacion 87569" }
+  - { id: "87576", nombre: "Estacion 87576" }
+  - { id: "87582", nombre: "Estacion 87582" }
+  - { id: "87585", nombre: "Estacion 87585" }
+  - { id: "87593", nombre: "Estacion 87593" }
+  - { id: "87596", nombre: "Estacion 87596" }
+  - { id: "87623", nombre: "Estacion 87623" }
+  - { id: "87637", nombre: "Estacion 87637" }
+  - { id: "87640", nombre: "Estacion 87640" }
+  - { id: "87641", nombre: "Estacion 87641" }
+  - { id: "87645", nombre: "Estacion 87645" }
+  - { id: "87648", nombre: "Estacion 87648" }
+  - { id: "87679", nombre: "Estacion 87679" }
+  - { id: "87688", nombre: "Estacion 87688" }
+  - { id: "87692", nombre: "Estacion 87692" }
+  - { id: "87715", nombre: "Estacion 87715" }
+  - { id: "87750", nombre: "Estacion 87750" }
+  - { id: "87765", nombre: "Estacion 87765" }
+  - { id: "87774", nombre: "Estacion 87774" }
+  - { id: "87791", nombre: "Estacion 87791" }
+  - { id: "87803", nombre: "Estacion 87803" }
+  - { id: "87828", nombre: "Estacion 87828" }
+  - { id: "87860", nombre: "Estacion 87860" }
+  - { id: "87904", nombre: "Estacion 87904" }
+  - { id: "87909", nombre: "Estacion 87909" }
+  - { id: "87925", nombre: "Estacion 87925" }
+  - { id: "87934", nombre: "Estacion 87934" }
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Definicion de configuraciones de eventos a ser analizadas.
+# ------------------------------------------------------------------------------
+configuraciones.eventos:
+  - [ conf_id, indice, escala, distribucion,   metodo_ajuste ]
+  - [       1,  "OlaCalor",  0,  "Empirica", "NoParametrico" ]
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Definicion de las variables a ser contempladas en las cópulas
+# ------------------------------------------------------------------------------
+variables_copulas:
+  # A pedido de Nati (11/8/2026): probar la copula intensidad-duracion.
+  # duracion tiene pocos valores distintos (heavy ties) -> ver
+  # variables_sin_test_continuidad mas abajo, que evita que el ajuste
+  # univariado la rechace por KS/AD/CvM (tests pensados para variables
+  # continuas). TestSn (copula::gofCopula) puede seguir fallando por el
+  # mismo motivo, ver README.md "Problemas conocidos".
+  # Los 3 pares se ajustan en la misma corrida (no hace falta repetir el
+  # pipeline por par); lo que sí varía por corrida es eventos.tipo, ver
+  # pruebas/correr_18_escenarios.sh.
+  - { variable_x: "intensidad", variable_y: "duracion" }
+  - { variable_x: "intensidad", variable_y: "magnitud" }
+  - { variable_x: "duracion",   variable_y: "magnitud" }
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Definicion de parametros para buscar eventos
+# ------------------------------------------------------------------------------
+eventos:
+  tipo: "calor"
+  duracion_minima: 3 # Expresado en dias (Olas.rds no usa pentadas)
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Definicion valores mínimos para la detección
+# ------------------------------------------------------------------------------
+valores_minimos:
+  - { variable: "duracion",   valor_minimo_deteccion: 1   }
+  - { variable: "intensidad", valor_minimo_deteccion: 0.1 }
+  - { variable: "magnitud",   valor_minimo_deteccion: 0.1 }
+  - { variable: "minimo",     valor_minimo_deteccion: 0.1 }
+  - { variable: "maximo",     valor_minimo_deteccion: 0.1 }
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Umbral de p-valor para dictaminar que el test de normalidad falla
+# ------------------------------------------------------------------------------
+umbral.p.valor: 0.05
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Variables cuya serie es discreta (pocos valores distintos, muchos empates,
+# ej. duracion medida en dias/pentadas enteras) para las que los tests de
+# bondad de ajuste KS/Anderson-Darling/Cramér-von Mises (que asumen una
+# distribucion continua) se omiten al elegir el mejor ajuste univariado. El
+# ajuste se sigue evaluando (y seleccionando entre distribuciones candidatas)
+# en base a RMSEIQR/CCC/QCOMHD. Dejar vacío para no exceptuar ninguna variable.
+# ------------------------------------------------------------------------------
+variables_sin_test_continuidad: ["duracion"]
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Período de retorno combinado (co-occurrence) para las cópulas finales.
+# Gráfico análogo a la Figura 7 de Chen et al. 2024: eje x = variable_x, eje y
+# = variable_y, contornos = años de retorno T = N/(n*(1-Fx-Fy+C(Fx,Fy))).
+# ------------------------------------------------------------------------------
+periodo_retorno:
+  niveles_anios: [2, 5, 10, 20, 50, 100, 200, 500]
+  resolucion_grilla: 100
+  # Cuanto extender la grilla mas alla del maximo observado, como fraccion
+  # del rango observado de cada variable (0 = no extender)
+  margen_grilla: 0.4
+  # Si es TRUE, ademas de la curva de periodo de retorno univariado (PASO 14)
+  # genera por cada estacion+variable un histograma de los eventos observados
+  # con la densidad de la distribucion ganadora superpuesta (analogo a la
+  # Figura 5 de Chen et al. 2024). FALSE por defecto: son 59 estaciones x 3
+  # variables = muchos PNG adicionales por corrida, se activa solo para
+  # validacion puntual.
+  graficar_distribucion_ajuste: FALSE
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Número de series perturbadas a ser consideradas
+# ------------------------------------------------------------------------------
+n.series.perturbadas: 2
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Número de realizaciones del generador a ser utilizadas
+# ------------------------------------------------------------------------------
+n.realizaciones: 1
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Semilla para la generación de las series perturbadas
+# ------------------------------------------------------------------------------
+s.series.perturbadas: 123
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Tests a ser considerados para determinar la estacionariedad
+# ------------------------------------------------------------------------------
+tests.estacionariedad: ["BoxPierceLjungBox", "PuntoCambioUni",
+                        'PuntoCambioAutocopula', 'MannKendall',
+                        "EstacionaridadEmpirico"]
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Tests a ser considerados para determinar la dependencia
+# ------------------------------------------------------------------------------
+tests.dependencia: ["Kendall", "Spearman", "CopulaEmpirica"]
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Configuraciones para el ajuste multivariado
+# ------------------------------------------------------------------------------
+configuracion.ajuste.copula:
+  - [ familia,   funcion_ajuste,   uso_sequias ]
+  - [ "gumbel",  "AjustarCopulaGumbel",   TRUE ]
+  - [ "frank",   "AjustarCopulaFrank",    TRUE ]
+  - [ "joe",     "AjustarCopulaJoe",      TRUE ]
+  - [ "clayton", "AjustarCopulaClayton",  TRUE ]
+  - [ "normal",  "AjustarCopulaNormal",   TRUE ]
+  - [ "t",       "AjustarCopulatstudent", TRUE ]
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Configuraciones para el ajuste univariado
+# ------------------------------------------------------------------------------
+configuracion.ajuste.univariado:
+  - [ distribucion, funcion_ajuste_lmomentos,                    funcion_ajuste_maxima_verosimilitud,                 uso_sequias ]
+  - [ "aep4", "AjustarLMomentosAsymetricExponentialPower",      "AjustarMaximaVerosimilitudAsymetricExponentialPower",     FALSE ]
+  - [ "cau",  "AjustarLMomentosCauchy",                         "AjustarMaximaVerosimilitudCauchy",                        FALSE ]
+  - [ "exl",  "AjustarLMomentosExponencial",                    "AjustarMaximaVerosimilitudExponencial",                   TRUE  ]
+  - [ "gam",	"AjustarLMomentosGamma",	                        "AjustarMaximaVerosimilitudGamma",	                       TRUE  ]
+  - [	"gep",	"AjustarLMomentosGeneralizedExponentialPoisson",	"AjustarMaximaVerosimilitudGeneralizedExponentialPoisson", FALSE ]
+  - [	"gev",	"AjustarLMomentosGeneralizedExtremeValue",	      "AjustarMaximaVerosimilitudGeneralizedExtremeValue",       TRUE  ]
+  - [	"gld",	"AjustarLMomentosGeneralizedLambda",	            "AjustarMaximaVerosimilitudGeneralizedLambda",             FALSE ]
+  - [	"glo",	"AjustarLMomentosGeneralizedLogistic",	          "AjustarMaximaVerosimilitudGeneralizedLogistic",           TRUE  ]
+  - [	"gno",	"AjustarLMomentosGeneralizedNormal",	            "AjustarMaximaVerosimilitudGeneralizedNormal",             TRUE  ]
+  - [	"gov",	"AjustarLMomentosGovindarajulu",	                "AjustarMaximaVerosimilitudGovindarajulu",                 FALSE ]
+  - [	"gpa",	"AjustarLMomentosGeneralizedPareto",	            "AjustarMaximaVerosimilitudGeneralizedPareto",             TRUE  ]
+  - [	"gum",	"AjustarLMomentosGumbel",	                        "AjustarMaximaVerosimilitudGumbel",                        TRUE  ]
+  - [	"kap",	"AjustarLMomentosKappa",                          "AjustarMaximaVerosimilitudKappa",                         FALSE ]
+  - [	"kur",	"AjustarLMomentosKumaraswamy",                    "AjustarMaximaVerosimilitudKumaraswamy",                   FALSE ]
+  - [	"lap",	"AjustarLMomentosLaplace",                        "AjustarMaximaVerosimilitudLaplace",                       TRUE  ]
+  - [	"lmrq",	"AjustarLMomentosLinearMeanResidualQuantile",     "AjustarMaximaVerosimilitudLinearMeanResidualQuantile",    FALSE ]
+  - [	"ln3",	"AjustarLMomentosLogNormal",                      "AjustarMaximaVerosimilitudLogNormal",                     TRUE  ]
+  - [	"nor",	"AjustarLMomentosNormal",                         "AjustarMaximaVerosimilitudNormal",                        TRUE  ]
+  - [	"pe3",	"AjustarLMomentosPearsonIII",                     "AjustarMaximaVerosimilitudPearsonIII",                    TRUE  ]
+  - [	"ray",	"AjustarLMomentosRayleigh",                       "AjustarMaximaVerosimilitudRayleigh",                      FALSE ]
+  - [	"rice",	"AjustarLMomentosRice",                           "AjustarMaximaVerosimilitudRice",                          FALSE ]
+  - [	"sla",	"AjustarLMomentosSlash",                          "AjustarMaximaVerosimilitudSlash",                         FALSE ]
+  - [	"st3",	"AjustarLMomentosStudent_t3",                     "AjustarMaximaVerosimilitudStudent_t3",                    TRUE  ]
+  - [	"tri",	"AjustarLMomentosAsymmetricTriangular",           "AjustarMaximaVerosimilitudAsymmetricTriangular",          FALSE ]
+  - [	"wak",	"AjustarLMomentosWakeby",                         "AjustarMaximaVerosimilitudWakeby",                        FALSE ]
+  - [	"wei",	"AjustarLMomentosWeibull",                        "AjustarMaximaVerosimilitudWeibull",                       TRUE  ]
+# ------------------------------------------------------------------------------
