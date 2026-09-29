@@ -15,6 +15,13 @@ eventos_identificados: "input/eventos_identificados_unconditional.csv"
 # ----------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------
+# Archivo con los eventos ENSO (RONI trimestral solapado) utilizados para
+# clasificar el evento ENSO correspondiente al inicio de cada evento.
+# ----------------------------------------------------------------------------
+eventos_enso: "input/enso_roni.txt"
+# ----------------------------------------------------------------------------
+
+# ----------------------------------------------------------------------------
 # Archivos con datos generados por el proceso de análisis de cópulas
 # ----------------------------------------------------------------------------
 copulas:
@@ -75,6 +82,14 @@ copulas:
   # (nombre dinámico, no depende de <*idc>).
   # FMT, es un objeto complejo, NO pude ser guardado en formato CSV.
   periodo_retorno: "output/periodo_retorno_<*idc>.rds"
+
+  # Archivo con la grilla de período de retorno univariado (una sola
+  # marginal) para cada estación+variable con mejor ajuste univariado.
+  # Además, por cada estación+variable se genera un PNG en
+  # "output/periodo_retorno_univariado_<id_ubicacion>_<variable>.png"
+  # (nombre dinámico, no depende de <*idc>).
+  # FMT, es un objeto complejo, NO pude ser guardado en formato CSV.
+  periodo_retorno_univariado: "output/periodo_retorno_univariado_<*idc>.rds"
 
   # Archivo con información sobre la corrida
   info_corrida: "partial/copulas_<*idc>.info"

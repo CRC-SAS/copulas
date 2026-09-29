@@ -8,7 +8,7 @@ list.of.packages <- c("dplyr", "purrr", "lubridate", "magrittr",
                       "lmomco", "stringr", "utils", "yaml", "goftest",
                       "WRS2", "futile.logger", "doSNOW", "foreach", 
                       "iterators", "snow", "yardstick", "hydroGOF", 
-                      "copula", "ggplot2", "R6", "RPostgres")
+                      "copula", "ggplot2", "ggnewscale", "R6", "RPostgres")
 for (pack in list.of.packages) {
   if (!require(pack, character.only = TRUE)) {
     stop(paste0("Paquete no encontrado: ", pack))
@@ -112,6 +112,7 @@ source(glue::glue("{config$dir$base}/lib/funciones_periodo_retorno.R"), echo = F
 source(glue::glue("{config$dir$base}/lib/funciones_mejor_ajuste_copula.R"), echo = FALSE)
 source(glue::glue("{config$dir$base}/lib/funciones_auxiliares.R"), echo = FALSE)
 source(glue::glue("{config$dir$base}/lib/funciones_worker.R"), echo = FALSE)
+source(glue::glue("{config$dir$base}/lib/funciones_enso.R"), echo = FALSE)
 
 
 # c.1) Definir nombre del script
@@ -182,6 +183,14 @@ eventos <- data.table::fread(glue::glue("{config$dir$data}/{config$files$eventos
                 fecha_fin = as.Date(fecha_fin),
                 referencia_comienzo = as.Date(referencia_comienzo),
                 referencia_fin = as.Date(referencia_fin))
+
+# Enriquecer los eventos con el evento ENSO (Nino/Nina/Neutro/indeterminado)
+# correspondiente al mes en el que comenzo cada uno
+eventos_enso <- LeerEventosEnso(glue::glue("{config$dir$data}/{config$files$eventos_enso}"))
+clasificacion_enso <- ClasificarMesesEnso(eventos_enso)
+eventos <- eventos %>%
+  dplyr::mutate(evento_enso = AsignarEventoEnso(fecha_inicio, clasificacion_enso))
+
 id_column <- IdentificarIdColumn(eventos)
 # Controlar que eventos tenga un id identificable
 if (! any(c("station_id", "point_id") %in% colnames(eventos)))
@@ -226,8 +235,8 @@ if (!all(union(variables_copulas$variable_x, variables_copulas$variable_y) %in% 
 serie_observada <- eventos %>%
   dplyr::mutate(intensidad = abs(intensidad), magnitud = abs(magnitud),
                 duracion = abs(duracion), minimo = abs(minimo), maximo = abs(maximo)) %>%
-  dplyr::select(realizacion, !!id_column, tipo_evento, conf_id, numero_evento, 
-                fecha_inicio, intensidad, magnitud, duracion, minimo, maximo) %>%
+  dplyr::select(realizacion, !!id_column, tipo_evento, conf_id, numero_evento,
+                fecha_inicio, evento_enso, intensidad, magnitud, duracion, minimo, maximo) %>%
   tidyr::pivot_longer(cols = c(intensidad, magnitud, duracion, minimo, maximo),
                       names_to = "variable", values_to = "valor") %>%
   dplyr::mutate(tipo_serie = "observada", n_serie = 0) %>% 
@@ -980,6 +989,93 @@ if (nrow(periodo_retorno_input) == 0) {
     # Guardar resultados en un archivo fácil de compartir
     script$info(glue::glue("Guardando período de retorno en el archivo {results_filename}"))
     base::saveRDS(periodo.retorno, results_filename)
+  }
+}
+
+# ------------------------------------------------------------------------------
+
+
+# -----------------------------------------------------------------------------#
+# --- PASO 14. Calcular el período de retorno univariado (una sola marginal)
+# --- para cada variable individual (intensidad, magnitud, duracion) con
+# --- mejor ajuste univariado ya calculado (PASO 6), y generar un gráfico
+# --- T-vs-valor por cada estación+variable con los eventos observados
+# --- superpuestos en posición de graficación empírica (Weibull). Fórmula:
+# --- T(x) = N / (n*(1 - F(x)))
+# -----------------------------------------------------------------------------#
+
+# Definir el objeto sobre el cual iterar: una fila por estación+variable con
+# mejor ajuste univariado válido. "nombre" se perdió al construir
+# ubicacion_x_variable en el PASO 6 (solo seleccionaba id+variable), se
+# recupera acá desde la tabla de ajustes univariados de esa misma etapa.
+periodo_retorno_univariado_input <- mejor.ajuste.univariado.x.ubic.var %>%
+  dplyr::filter(!is.na(distribucion)) %>%
+  dplyr::select(!!id_column, variable) %>%
+  dplyr::left_join(ajuste.univariado.x.ubic.var.dist %>%
+                     dplyr::select(!!id_column, nombre) %>% dplyr::distinct(),
+                   by = id_column)
+
+if (nrow(periodo_retorno_univariado_input) == 0) {
+  script$warn("Ninguna variable tiene ajuste univariado válido: se omite el cálculo de período de retorno univariado")
+} else {
+  # Definir el nombre de la función a ser paralelizada
+  function_name <- "CalcularPeriodoRetornoUV"
+
+  # Definir nombre de archivos .log y .out de corridas anteriores
+  task_logfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.log")
+  task_outfile <- glue::glue("{config$dir$run}/{script_name}-{function_name}.out")
+
+  # Borrar archivos .log y .out de corridas anteriores
+  if (file.exists(task_logfile))
+    file.remove(task_logfile)
+  if (file.exists(task_outfile))
+    file.remove(task_outfile)
+
+  # Definir nombre del archivo donde se van a guardar los resultados
+  results_filename <- glue::glue("{config$dir$data}/{config$files$copulas$periodo_retorno_univariado}")
+
+  # Borrar archivo de resultado de corridas anteriores
+  if (file.exists(results_filename))
+    file.remove(results_filename)
+
+  # Crear tarea distribuida y ejecutarla
+  task <- Task$new(parent.script = script,
+                   func.name = function_name,
+                   packages = list.of.packages)
+
+  # Informar inicio de ejecución
+  script$info("Calculando período de retorno univariado para cada variable")
+  # Ejecutar tarea distribuida
+  periodo.retorno.univariado <- task$run(number.of.processes = config$max.procesos,
+                                         input.values = periodo_retorno_univariado_input,
+                                         mejores.ajustes.univariados = mejor.ajuste.univariado.x.ubic.var,
+                                         eventos.completos = eventos_completos,
+                                         niveles.anios = config$params$periodo_retorno$niveles_anios,
+                                         resolucion.grilla = config$params$periodo_retorno$resolucion_grilla,
+                                         margen.grilla = config$params$periodo_retorno$margen_grilla,
+                                         dir.salida.png = glue::glue("{config$dir$data}/output"),
+                                         graficar.distribucion = isTRUE(config$params$periodo_retorno$graficar_distribucion_ajuste))
+
+  # Transformar resultados a un objeto de tipo tibble
+  periodo.retorno.univariado <- periodo.retorno.univariado %>% purrr::map_dfr(~.x)
+
+  # Agregar log de la tarea al log del script
+  file.append(script_logfile, task_logfile)
+
+  # Si hay errores, terminar ejecucion
+  task.errors <- task$getErrors()
+  if (length(task.errors) > 0) {
+    for (error.obj in task.errors) {
+      id_column <- IdentificarIdColumn(periodo_retorno_univariado_input[1,])
+      script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
+                             "variable=\"{error.obj$input.value[['variable']]}\")",
+                             ": {error.obj$error}"))
+    }
+    script$error("Finalizando script de forma ANORMAL")
+  } else {
+    # Guardar resultados en un archivo fácil de compartir
+    script$info(glue::glue("Guardando período de retorno univariado en el archivo {results_filename}"))
+    base::saveRDS(periodo.retorno.univariado, results_filename)
   }
 }
 

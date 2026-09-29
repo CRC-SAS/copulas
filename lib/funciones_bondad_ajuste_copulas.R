@@ -231,26 +231,46 @@ TestearBondadAjusteCopulas <- function(x, y,  umbral.p.valor, copula = NULL, omi
     }
   }
   
-  # 4. Aplicar tests de AIC, BIC, RME, RMSE y Validacion cruzada 
+  # 4. Aplicar tests de AIC, BIC, RME, RMSE y Validacion cruzada
   #    Guardar los valores resultantes, pero no dictaminar en base a esos tests.
+  #    Al igual que Sn (seccion 3), estos tests pueden fallar para una serie
+  #    perturbada puntual (ej. TestValidacionCruzada reajusta la copula
+  #    internamente via copula::xvCopula -> optim(), que puede fallar con
+  #    "non-finite finite-difference value" igual que el ajuste original).
+  #    Si alguno falla no debe abortar todo el script: se atrapa el error,
+  #    se informa como warning y ese test queda ausente (NA) del data.frame
+  #    de estadisticos, dejando que el resto de los tests que si funcionaron
+  #    definan la mejor copula.
   if (! falla.ajuste) {
     # i. AIC
-    aic <- TestAIC(copula = copula)
+    aic <- tryCatch(TestAIC(copula = copula), error = function(e) {
+      cat("Error en TestAIC:", e$message, "\n")
+      NA_real_
+    })
     resultados.tests$estadisticos <- rbind(resultados.tests$estadisticos, data.frame(test = 'AIC', parametro = 'aic', valor = aic))
-    
+
     # ii. BIC
-    bic <- TestBIC(x = x, y = y, copula = copula)
+    bic <- tryCatch(TestBIC(x = x, y = y, copula = copula), error = function(e) {
+      cat("Error en TestBIC:", e$message, "\n")
+      NA_real_
+    })
     resultados.tests$estadisticos <- rbind(resultados.tests$estadisticos, data.frame(test = 'BIC', parametro = 'bic', valor = bic))
-    
+
     # iii. Error
-    error <- TestError(copula = copula, n = 1000)
-    resultados.tests$estadisticos <- rbind(resultados.tests$estadisticos, 
-      data.frame(test = c('MRE', 'RMSE'), 
-        parametro = c('mre', 'rmse'), 
+    error <- tryCatch(TestError(copula = copula, n = 1000), error = function(e) {
+      cat("Error en TestError:", e$message, "\n")
+      list(mre = NA_real_, rmse = NA_real_)
+    })
+    resultados.tests$estadisticos <- rbind(resultados.tests$estadisticos,
+      data.frame(test = c('MRE', 'RMSE'),
+        parametro = c('mre', 'rmse'),
         valor = c(error[[1]], error[[2]])))
-    
+
     # iv. Validacion cruzada
-    validacion.cruzada <- TestValidacionCruzada(copula = copula, x = x, y = y)
+    validacion.cruzada <- tryCatch(TestValidacionCruzada(copula = copula, x = x, y = y), error = function(e) {
+      cat("Error en TestValidacionCruzada:", e$message, "\n")
+      list(CIC = NA_real_)
+    })
     resultados.tests$estadisticos <- rbind(resultados.tests$estadisticos, data.frame(test = 'Validacion cruzada', parametro = 'cic', valor = unlist(unname(validacion.cruzada))))
   }
   

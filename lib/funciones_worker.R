@@ -17,11 +17,26 @@ AplicarMejorAjusteACopulas <- function(input.value, script, copulas.ajustadas,
                          "n_serie = {ucs$n_serie}"))
   
   # Extraer la familia que mejor ajusta esta cópula
-  mejor_familia <- mejor.ajuste.multivariado %>% 
+  mejor_familia <- mejor.ajuste.multivariado %>%
     dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
                   variable_x == input.value$variable_x, variable_y == input.value$variable_y) %>%
     dplyr::pull(familia)
-  
+
+  # Si ninguna familia de cópula pudo ajustarse en ninguna serie perturbada
+  # (ej. dependencia no positiva, ver AjustarCopulas), mejor_familia queda NA:
+  # no hay nada que aplicar, se devuelve el resultado en NA en vez de romper
+  # mas adelante con do.call("NACopula", ...).
+  if (is.na(mejor_familia)) {
+    return(input.value %>%
+             dplyr::mutate(parametro_mejor_copula = NA_real_,
+                           mejor_copula = list(NA),
+                           mejor_ajuste_x_dist = NA_character_,
+                           mejor_ajuste_x_params = list(NA),
+                           mejor_ajuste_y_dist = NA_character_,
+                           mejor_ajuste_y_params = list(NA),
+                           ajuste_multivariado = list(NA)))
+  }
+
   # Se seleccionan las copulas que fueron ajustas utilizando la que resultó ser la mejor familia
   copulas_ajustadas_familia <- copulas.ajustadas %>%
     dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(input.value, !!id_column),
@@ -98,15 +113,24 @@ MejorAjusteMultivariadoUC <- function(input.value, script, copulas.ajustadas, um
   # Se determinan las mátricas para la identificación de la cópula que mejor ajusta
   estadisticos <-  copulas_ajustadas_ubicacion %>% purrr::pmap_dfr(
     function(n_serie_perturbada, familia, bondad.ajuste, ...) {
-      return(tidyr::crossing(n_serie_perturbada = n_serie_perturbada, familia = familia, 
+      return(tidyr::crossing(n_serie_perturbada = n_serie_perturbada, familia = familia,
                              bondad.ajuste$estadisticos))
     })
-  metricas.ajuste.copula <- estadisticos %>%
-    dplyr::filter(., test != 'estimate') %>%
-    dplyr::group_by(familia, test) %>%
-    dplyr::summarise(., mediana = median(valor),
-                     media = mean(valor),
-                     sd = sd(valor)) 
+  # Si NINGUNA familia pudo ajustarse en NINGUNA serie perturbada (ej.
+  # dependencia no positiva en todas, ver AjustarCopulas), estadisticos no
+  # tiene ni siquiera la columna "test" (todas las filas vinieron de un
+  # bondad.ajuste$estadisticos = NULL): tratarlo como "no hay candidatas" en
+  # vez de romper el filter().
+  if (! "test" %in% names(estadisticos)) {
+    metricas.ajuste.copula <- estadisticos[0, ]
+  } else {
+    metricas.ajuste.copula <- estadisticos %>%
+      dplyr::filter(., test != 'estimate') %>%
+      dplyr::group_by(familia, test) %>%
+      dplyr::summarise(., mediana = median(valor),
+                       media = mean(valor),
+                       sd = sd(valor))
+  }
   
   # Inicializar objeto para guardar resultados
   mejor.ajuste <- tibble::tibble(
@@ -223,9 +247,25 @@ AjustarCopulas <- function(input.value, script, eventos.completos, umbral.p.valo
   # -----------------------------------------------------------------------------#
   # Paso 1: Realizar ajuste multivariado ----
   # -----------------------------------------------------------------------------#
-  # 
-  ajuste.copula <- do.call(what = vcu$funcion_ajuste, args = parametros)
-  
+  # Si el ajuste de esta familia falla para esta serie en particular (ej.
+  # stopifnot(tau > 0) cuando la dependencia no es positiva, o el parametro
+  # estimado cae fuera de su propio intervalo de confianza), no debe abortar
+  # todo el script: se atrapa el error, se informa como warning y se arma un
+  # resultado "sin ajuste" con la misma forma que devuelven las funciones
+  # AjustarCopula* cuando fallan internamente, para que TestearBondadAjusteCopulas
+  # lo trate como un ajuste fallido en vez de romper.
+  ajuste.copula <- tryCatch({
+    do.call(what = vcu$funcion_ajuste, args = parametros)
+  }, error = function(e) {
+    script$warn(glue::glue("Error al ajustar la cópula \"{vcu$familia}\" para ",
+                           "\"{vcu$variable_x}-{vcu$variable_y}\" (tipo_serie=\"{vcu$tipo_serie}\", ",
+                           "n_serie={vcu$n_serie}): {conditionMessage(e)}"))
+    list(familia = vcu$familia, copula = NA,
+        dependencia = list(tau.kendall = NA),
+        parametro = list(theta = NA),
+        bondad.ajuste = list(varianza = NA, loglike = NA))
+  })
+
   # ------------------------------------------------------------------------------
   
   
@@ -383,18 +423,24 @@ AplicarMejorAjusteASeriesPerturbadas <- function(input.value, script, series.per
   # Paso 1: Aplicar mejor ajuste univariado ----
   # -----------------------------------------------------------------------------#
   
-  # Ajustar distribucion univariada utilizando el mejor ajuste
+  # Ajustar distribucion univariada utilizando el mejor ajuste. Si el ajuste
+  # sobre esta serie perturbada en particular falla (ej. la MLE no converge
+  # para esta muestra puntual), no debe abortar todo el script: se atrapa el
+  # error, se informa como warning y se registra como "sin ajuste" (mismo
+  # formato que cuando no habia mejor_ajuste), y se sigue con el resto.
   if (is.na(input.value$mejor_ajuste)) {
     ajuste <- list(parametros = NA)
-  } else if (input.value$mejor_ajuste == 'lmomentos') {
-    # Ajuste por L-momentos
-    ajuste <- do.call(what = input.value$funcion_mejor_ajuste, 
-                      args = list(x.prima, min.cantidad.valores = 50))
-    
-  } else if (input.value$mejor_ajuste == 'maxima.verosimilitud')   { 
-    # Ajustar por Maxima Verosimilitud 
-    ajuste <- do.call(what = input.value$funcion_mejor_ajuste, 
-                      args = list(x.prima, min.cantidad.valores = 50))
+  } else if (input.value$mejor_ajuste %in% c('lmomentos', 'maxima.verosimilitud')) {
+    ajuste <- tryCatch({
+      do.call(what = input.value$funcion_mejor_ajuste,
+             args = list(x.prima, min.cantidad.valores = 30))
+    }, error = function(e) {
+      script$warn(glue::glue("Error al aplicar el mejor ajuste ({input.value$funcion_mejor_ajuste}) ",
+                             "a la serie perturbada (variable=\"{input.value$variable}\", ",
+                             "tipo_serie=\"{input.value$tipo_serie}\", n_serie={input.value$n_serie}): ",
+                             "{conditionMessage(e)}"))
+      list(parametros = NA)
+    })
   }
   
   # ------------------------------------------------------------------------------
@@ -490,8 +536,8 @@ AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.v
   configuracion <- uvd %>% 
     dplyr::select(distribucion, funcion_ajuste_lmomentos, funcion_ajuste_maxima_verosimilitud)
   
-  parametros.lmomentos            <- list(x = x, min.cantidad.valores = 50)
-  parametros.maxima.verosimilitud <- list(x = x, min.cantidad.valores = 50, numero.muestras = NULL)
+  parametros.lmomentos            <- list(x = x, min.cantidad.valores = 30)
+  parametros.maxima.verosimilitud <- list(x = x, min.cantidad.valores = 30, numero.muestras = NULL)
   
   ajuste.univariado <- AjusteUnivariadoConfig(x = x,
                                               umbral.p.valor = umbral.p.valor,
@@ -539,6 +585,9 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
 
   x_obs <- eventos_ubic %>% dplyr::filter(variable == uc$variable_x) %>% dplyr::pull(valor)
   y_obs <- eventos_ubic %>% dplyr::filter(variable == uc$variable_y) %>% dplyr::pull(valor)
+  # evento_enso es un atributo por evento (no por variable): se toma del mismo
+  # subconjunto/orden que x_obs, con el que queda alineado fila a fila
+  enso_obs <- eventos_ubic %>% dplyr::filter(variable == uc$variable_x) %>% dplyr::pull(evento_enso)
 
   # Grilla de evaluacion: desde el minimo observado hasta el maximo observado
   # + un margen (fraccion del rango observado), para poder ver isolineas mas
@@ -548,18 +597,142 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
   grid_x <- seq(rango_x[1], rango_x[2] + diff(rango_x) * margen.grilla, length.out = resolucion.grilla)
   grid_y <- seq(rango_y[1], rango_y[2] + diff(rango_y) * margen.grilla, length.out = resolucion.grilla)
 
-  grilla <- CalcularGrillaPeriodoRetorno(mv, N, n, grid_x, grid_y)
+  familia <- sub("Copula$", "", class(mv@copula))
 
-  familia   <- sub("Copula$", "", class(mv@copula))
-  id_valor  <- dplyr::pull(uc, !!id_column)
-  archivo_png <- glue::glue("{dir.salida.png}/periodo_retorno_{id_valor}_{uc$variable_x}_{uc$variable_y}.png")
-  titulo <- glue::glue("Período de retorno combinado - cópula {familia}\n",
-                       "{uc$variable_x}-{uc$variable_y} ({uc$nombre})")
+  # El ajuste multivariado puede existir (mv no es NA) pero tener parametro
+  # NA igual (ej. la familia ganadora solo ajusto en algunas series
+  # perturbadas y la seleccion de parametros termino apuntando a una de las
+  # que fallo). CalcularGrillaPeriodoRetorno llama a pCopula/probval.TVPACK,
+  # que abortan con error (no NA) si el parametro es NA. Igual que el resto
+  # del pipeline (ver fc17f05), un fallo puntual en una estacion+par no debe
+  # abortar todo el script: se atrapa, se informa como warning y esa fila
+  # se degrada a resultado NA (sin archivo_png ni grilla).
+  resultado <- tryCatch({
+    grilla <- CalcularGrillaPeriodoRetorno(mv, N, n, grid_x, grid_y)
 
-  GraficarPeriodoRetorno(grilla, niveles.anios, x_obs, y_obs,
-                         nombre_x = uc$variable_x, nombre_y = uc$variable_y,
-                         titulo = titulo, archivo_png = archivo_png)
+    id_valor  <- dplyr::pull(uc, !!id_column)
+    archivo_png <- glue::glue("{dir.salida.png}/periodo_retorno_{id_valor}_{uc$variable_x}_{uc$variable_y}.png")
+    titulo <- glue::glue("Período de retorno combinado - cópula {Capitalizar(familia)}\n",
+                         "{EtiquetaVariable(uc$variable_x)}-{EtiquetaVariable(uc$variable_y)} ({uc$nombre})")
+
+    # La copula se ajusta y la grilla se calcula siempre respetando el orden
+    # variable_x/variable_y tal cual quedo fijado en variables_copulas (ese
+    # orden es el que importa para el ajuste del mvdc, no se toca). Para el
+    # grafico, en cambio, se prefiere mostrar siempre "duracion" en el eje X
+    # cuando participa del par: si aca quedo en variable_y, se invierten
+    # unicamente las columnas de graficacion (la grilla/x_obs/y_obs/nombres
+    # que se le pasan a GraficarPeriodoRetorno), sin re-ajustar nada.
+    invertir_grafico <- identical(uc$variable_y, "duracion") && !identical(uc$variable_x, "duracion")
+    if (invertir_grafico) {
+      grilla_graf <- grilla %>% dplyr::rename(x = y, y = x)
+      x_obs_graf <- y_obs; y_obs_graf <- x_obs
+      nombre_x_graf <- uc$variable_y; nombre_y_graf <- uc$variable_x
+    } else {
+      grilla_graf <- grilla
+      x_obs_graf <- x_obs; y_obs_graf <- y_obs
+      nombre_x_graf <- uc$variable_x; nombre_y_graf <- uc$variable_y
+    }
+
+    GraficarPeriodoRetorno(grilla_graf, niveles.anios, x_obs_graf, y_obs_graf, enso_obs,
+                           nombre_x = nombre_x_graf, nombre_y = nombre_y_graf,
+                           titulo = titulo, archivo_png = archivo_png)
+
+    list(archivo_png = archivo_png, grilla = grilla)
+  }, error = function(e) {
+    script$warn(glue::glue("Error al calcular el período de retorno para la cópula ",
+                           "\"{uc$variable_x}-{uc$variable_y}\" (familia=\"{familia}\"), ",
+                           "ubicación = {uc %>% dplyr::pull(!!id_column)}: {conditionMessage(e)}"))
+    list(archivo_png = NA_character_, grilla = NA)
+  })
 
   return(uc %>% dplyr::mutate(familia = familia, N = N, n = n,
-                              archivo_png = archivo_png, grilla = list(grilla)))
+                              archivo_png = resultado$archivo_png, grilla = list(resultado$grilla)))
+}
+
+
+CalcularPeriodoRetornoUV <- function(input.value, script, mejores.ajustes.univariados, eventos.completos,
+                                     niveles.anios, resolucion.grilla, margen.grilla, dir.salida.png,
+                                     graficar.distribucion = FALSE) {
+  # Ubicación y variable a analizar
+  uv <- input.value
+
+  # Identificar la columna con el id de la ubicación (usualmente station_id, o point_id)
+  id_column <- IdentificarIdColumn(uv)
+
+  # Informar estado de la ejecución
+  script$info(glue::glue("Calculando período de retorno univariado para la variable \"{uv$variable}\", ",
+                         "ubicación = {uv %>% dplyr::pull(!!id_column)}"))
+
+  # Obtener la distribucion+parametros del mejor ajuste univariado ya calculado (PASO 6)
+  ajuste <- mejores.ajustes.univariados %>%
+    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(uv, !!id_column), variable == uv$variable)
+  distribucion <- ajuste$distribucion
+  parametros <- ajuste$parametros[[1]]
+
+  # Serie observada (sin perturbar) para esta ubicación+variable: da n
+  # (cantidad de eventos), N (extension del registro en anios) y los puntos
+  # a graficar en posicion Weibull
+  eventos_ubic <- eventos.completos %>%
+    dplyr::filter(!!rlang::sym(id_column) == dplyr::pull(uv, !!id_column),
+                  variable == uv$variable, tipo_serie == "observada")
+
+  fechas <- eventos_ubic %>% dplyr::pull(fecha_inicio)
+  n <- length(fechas)
+  N <- as.numeric(diff(range(fechas))) / 365.25
+
+  x_obs <- eventos_ubic %>% dplyr::pull(valor)
+
+  # Grilla de evaluacion: desde el minimo observado hasta el maximo observado
+  # + un margen (fraccion del rango observado), igual criterio que el caso bivariado
+  rango_x <- range(x_obs)
+  grid_x <- seq(rango_x[1], rango_x[2] + diff(rango_x) * margen.grilla, length.out = resolucion.grilla)
+
+  id_valor <- dplyr::pull(uv, !!id_column)
+
+  # Mismo criterio defensivo que CalcularPeriodoRetornoUC (ver fc17f05/373e1df):
+  # un fallo puntual en una estacion+variable no debe abortar todo el script.
+  resultado <- tryCatch({
+    grilla <- CalcularGrillaPeriodoRetornoUV(distribucion, parametros, N, n, grid_x)
+
+    archivo_png <- glue::glue("{dir.salida.png}/periodo_retorno_univariado_{id_valor}_{uv$variable}.png")
+    titulo <- glue::glue("Período de retorno univariado - distribución {distribucion}\n",
+                         "{uv$variable} ({uv$nombre})")
+
+    GraficarPeriodoRetornoUV(grilla, niveles.anios, x_obs, N, n,
+                             nombre_x = uv$variable, titulo = titulo, archivo_png = archivo_png)
+
+    list(archivo_png = archivo_png, grilla = grilla)
+  }, error = function(e) {
+    script$warn(glue::glue("Error al calcular el período de retorno univariado para la variable ",
+                           "\"{uv$variable}\" (distribución=\"{distribucion}\"), ",
+                           "ubicación = {uv %>% dplyr::pull(!!id_column)}: {conditionMessage(e)}"))
+    list(archivo_png = NA_character_, grilla = NA)
+  })
+
+  # Grafico opcional (parametro periodo_retorno.graficar_distribucion_ajuste,
+  # ver 01_copulas.R): histograma de los eventos observados + densidad de la
+  # distribucion ganadora superpuesta, analogo a la Figura 5 de Chen et al.
+  # 2024. Independiente del calculo de T de arriba (tryCatch propio): que
+  # falle un grafico no debe tumbar el otro.
+  archivo_png_distribucion <- NA_character_
+  if (isTRUE(graficar.distribucion)) {
+    archivo_png_distribucion <- tryCatch({
+      archivo_png_dist <- glue::glue("{dir.salida.png}/distribucion_univariada_{id_valor}_{uv$variable}.png")
+      titulo_dist <- glue::glue("Distribución ajustada - {distribucion}\n{uv$variable} ({uv$nombre})")
+
+      GraficarDistribucionUnivariada(x_obs, distribucion, parametros, nombre_x = uv$variable,
+                                     titulo = titulo_dist, archivo_png = archivo_png_dist)
+
+      archivo_png_dist
+    }, error = function(e) {
+      script$warn(glue::glue("Error al graficar la distribución ajustada para la variable ",
+                             "\"{uv$variable}\" (distribución=\"{distribucion}\"), ",
+                             "ubicación = {uv %>% dplyr::pull(!!id_column)}: {conditionMessage(e)}"))
+      NA_character_
+    })
+  }
+
+  return(uv %>% dplyr::mutate(distribucion = distribucion, N = N, n = n,
+                              archivo_png = resultado$archivo_png, grilla = list(resultado$grilla),
+                              archivo_png_distribucion = archivo_png_distribucion))
 }
