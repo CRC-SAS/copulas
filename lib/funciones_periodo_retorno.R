@@ -3,23 +3,27 @@
 # ---- copula ya ajustada, analogo a la Figura 7 de Chen et al. 2024         ----
 # ------------------------------------------------------------------------------#
 
-# Paleta divergente rojo (Nino) <-> azul (Nina) con gris neutro, usada para
-# colorear el relleno de los puntos observados en GraficarPeriodoRetorno segun
-# el evento ENSO vigente al inicio de cada evento. Validada con el script de
-# validacion de paletas (separacion CVD/vision normal >= umbral entre las
-# ramas roja y azul, y del gris contra ambas; rampas monotonas en luminosidad
-# dentro de cada rama) - ver docs/superpowers si se necesita regenerar.
+# Paleta divergente rojo (Nino) <-> azul (Nina), usada para colorear el
+# relleno de los puntos observados en GraficarPeriodoRetorno segun el evento
+# ENSO vigente al inicio de cada evento. Validada con el script de validacion
+# de paletas (separacion CVD/vision normal >= umbral entre las ramas roja y
+# azul; rampas monotonas en luminosidad dentro de cada rama) - ver
+# docs/superpowers si se necesita regenerar. Neutro va sin relleno (solo el
+# borde negro del punto) para que los eventos ENSO resalten sobre el heatmap.
 COLORES_ENSO <- c(
   "Niño Muy Fuerte" = "#a50f15",
   "Niño Fuerte"     = "#de2d26",
   "Niño Moderado"   = "#fb6a4a",
   "Niño Débil" = "#fcae91",
-  "Neutro"               = "#7f7f7f",
+  "Neutro"               = "transparent",
   "Niña Débil" = "#bdd7e7",
   "Niña Moderada"   = "#6baed6",
   "Niña Fuerte"     = "#08519c"
 )
 NIVELES_ENSO <- names(COLORES_ENSO)
+# Neutro se dibuja como cuadrado (22) y el resto como circulo (21): asi los
+# neutros (sin relleno) no se confunden con los NA (circulo blanco)
+FORMAS_ENSO <- stats::setNames(ifelse(NIVELES_ENSO == "Neutro", 22, 21), NIVELES_ENSO)
 #
 # Formula (caso AND / co-occurrence, ambas variables superan simultaneamente
 # el umbral x,y):
@@ -27,6 +31,16 @@ NIVELES_ENSO <- names(COLORES_ENSO)
 # donde N es la extension del registro en anios, n la cantidad de eventos,
 # F_X/F_Y las marginales ajustadas y C la copula ajustada. Se reutiliza el
 # objeto mvdc (copula + ambas marginales) ya calculado por el pipeline.
+
+# Primera letra en mayuscula, para nombres de variables/familias en titulos y ejes
+Capitalizar <- function(texto) {
+  paste0(toupper(substr(texto, 1, 1)), substring(texto, 2))
+}
+
+# Etiqueta legible de una variable para titulos/ejes (los nombres internos van sin tilde)
+EtiquetaVariable <- function(variable) {
+  Capitalizar(dplyr::recode(variable, duracion = "duración"))
+}
 
 CalcularGrillaPeriodoRetorno <- function(mvdc, N, n, grid_x, grid_y) {
   # La familia ganadora puede tener parametro NA (ver AplicarMejorAjusteACopulas
@@ -98,33 +112,52 @@ GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs, enso_obs
                           color = "white", linewidth = 0.4) +
     ggplot2::scale_fill_viridis_c(trans = "log10", breaks = niveles_anios,
                                   limits = range(niveles_anios), oob = scales::squish,
-                                  name = "Período de\nretorno (años)") +
+                                  name = "Período de\nretorno (años)",
+                                  guide = ggplot2::guide_colourbar(
+                                    direction = "vertical", order = 1,
+                                    theme = ggplot2::theme(legend.key.height = ggplot2::unit(10, "lines")))) +
     # El heatmap de arriba ya usa la estetica "fill" (escala continua viridis);
     # ggnewscale permite una segunda escala "fill" independiente para los
     # puntos observados (escala discreta ENSO), en vez de compartir una sola
     # escala de fill para todo el grafico
     ggnewscale::new_scale_fill() +
-    ggplot2::geom_point(data = observados, ggplot2::aes(x = x, y = y, fill = evento_enso),
-                        shape = 21, color = "black", size = 1.8, stroke = 0.4) +
+    # fill y shape comparten name/breaks, por lo que ggplot fusiona ambas
+    # escalas en una unica leyenda "Intensidad ENSO"
+    ggplot2::geom_point(data = observados, ggplot2::aes(x = x, y = y, fill = evento_enso, shape = evento_enso),
+                        color = "black", size = 1.8, stroke = 0.4) +
     ggplot2::scale_fill_manual(values = COLORES_ENSO, breaks = NIVELES_ENSO,
-                               name = "Evento ENSO\n(al inicio del evento)",
+                               name = "Intensidad ENSO",
                                na.value = "white", drop = TRUE,
-                               guide = ggplot2::guide_legend(nrow = 2, byrow = TRUE)) +
-    ggplot2::labs(x = nombre_x, y = nombre_y, title = titulo) +
+                               guide = ggplot2::guide_legend(ncol = 1, order = 2)) +
+    ggplot2::scale_shape_manual(values = FORMAS_ENSO, breaks = NIVELES_ENSO,
+                                name = "Intensidad ENSO",
+                                na.value = 21, drop = TRUE,
+                                guide = ggplot2::guide_legend(ncol = 1, order = 2)) +
+    ggplot2::labs(x = EtiquetaVariable(nombre_x), y = EtiquetaVariable(nombre_y), title = titulo) +
     ggplot2::theme_minimal(base_size = 12) +
-    ggplot2::theme(plot.title = ggplot2::element_text(face = "bold"),
-                  legend.position = "bottom", legend.box = "vertical")
+    # Ambas leyendas apiladas a la derecha (en vez de abajo) y margenes
+    # minimos, para dejarle al panel la mayor area posible
+    ggplot2::theme(plot.title = ggplot2::element_text(face = "bold", hjust = 0.5),
+                   plot.title.position = "plot",
+                   legend.position = "right", legend.box = "vertical",
+                   legend.justification = "center",
+                   legend.box.spacing = ggplot2::unit(4, "pt"),
+                   legend.spacing.y = ggplot2::unit(8, "pt"),
+                   legend.margin = ggplot2::margin(0, 0, 0, 0),
+                   plot.margin = ggplot2::margin(4, 4, 4, 4))
 
   # La duracion es conceptualmente entera (dias), pero se trata como continua
   # en la grilla de evaluacion: sin esto, los breaks automaticos de ggplot
   # eligen incrementos "redondos" (2.5, 7.5, ...) que no tienen sentido para
   # una duracion. Se fuerza a mostrar todos los enteros del rango graficado.
-  if (identical(nombre_x, "duracion")) {
-    p <- p + ggplot2::scale_x_continuous(breaks = seq(floor(min(grid_x)), ceiling(max(grid_x)), by = 1))
-  }
-  if (identical(nombre_y, "duracion")) {
-    p <- p + ggplot2::scale_y_continuous(breaks = seq(floor(min(grid_y)), ceiling(max(grid_y)), by = 1))
-  }
+  # expand = 0 elimina el padding de ejes: el heatmap ocupa todo el panel.
+  breaks_x <- if (identical(nombre_x, "duracion")) seq(floor(min(grid_x)), ceiling(max(grid_x)), by = 1) else ggplot2::waiver()
+  breaks_y <- if (identical(nombre_y, "duracion")) seq(floor(min(grid_y)), ceiling(max(grid_y)), by = 1) else ggplot2::waiver()
+  p <- p + ggplot2::scale_x_continuous(breaks = breaks_x, expand = c(0, 0)) +
+    ggplot2::scale_y_continuous(breaks = breaks_y, expand = c(0, 0)) +
+    # clip = "off": con expand = 0 los puntos observados sobre el borde del
+    # panel (la grilla arranca en el minimo observado) quedarian cortados
+    ggplot2::coord_cartesian(clip = "off")
 
   if (nrow(etiquetas) > 0) {
     p <- p + ggplot2::geom_label(data = etiquetas, ggplot2::aes(x = x, y = y, label = nivel),

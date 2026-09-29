@@ -612,8 +612,8 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
 
     id_valor  <- dplyr::pull(uc, !!id_column)
     archivo_png <- glue::glue("{dir.salida.png}/periodo_retorno_{id_valor}_{uc$variable_x}_{uc$variable_y}.png")
-    titulo <- glue::glue("Período de retorno combinado - cópula {familia}\n",
-                         "{uc$variable_x}-{uc$variable_y} ({uc$nombre})")
+    titulo <- glue::glue("Período de retorno combinado - cópula {Capitalizar(familia)}\n",
+                         "{EtiquetaVariable(uc$variable_x)}-{EtiquetaVariable(uc$variable_y)} ({uc$nombre})")
 
     # La copula se ajusta y la grilla se calcula siempre respetando el orden
     # variable_x/variable_y tal cual quedo fijado en variables_copulas (ese
