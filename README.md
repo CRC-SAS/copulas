@@ -26,6 +26,10 @@ El manual metodológico extendido está en
 [`docs/manual_copulas.Rmd`](docs/manual_copulas.Rmd)
 (renderizado en `docs/manual_copulas.html` / `.pdf`).
 
+**¿Primera vez corriendo el pipeline?** Seguí la
+[guía de ejecución paso a paso](docs/guia_ejecucion.md), que cubre tanto una
+corrida simple como el modo batch (un escenario por tipo de evento).
+
 > **Fuera de alcance de este repo:** la identificación de eventos secos y el
 > generador estocástico de series sintéticas son procesos previos, corridos por
 > fuera de este repositorio. Acá se **consume** su salida (ver sección 3).
@@ -106,7 +110,7 @@ data/partial/                               → resultados intermedios (semilla,
 data/output/                                → resultados finales (ajustes univariados/multivariados,
                                                cópulas) — no versionado
 run/                                        → logs y pid de la corrida — no versionado
-docs/                                       → guía conceptual y manual metodológico
+docs/                                       → guía de ejecución, guía conceptual y manual metodológico
 ```
 
 ## 3. Archivos necesarios para correr
@@ -228,6 +232,9 @@ station_id,tipo_evento,conf_id,realizacion,numero_evento,fecha_inicio,fecha_fin,
 ```
 
 ## 4. Ejemplo de ejecución
+
+> Para una guía completa paso a paso (incluyendo el modo batch por tipo de
+> evento), ver [`docs/guia_ejecucion.md`](docs/guia_ejecucion.md).
 
 ```bash
 # Usando los 3 YAML por defecto: busca configuracion_copulas.yml y
