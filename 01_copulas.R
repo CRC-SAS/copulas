@@ -191,6 +191,11 @@ clasificacion_enso <- ClasificarMesesEnso(eventos_enso)
 eventos <- eventos %>%
   dplyr::mutate(evento_enso = AsignarEventoEnso(fecha_inicio, clasificacion_enso))
 
+# Cantidad minima de eventos para ajustar una distribucion univariada (30 si
+# no se define min_cantidad_valores_ajuste_univariado en el YAML de parametros)
+min_cantidad_valores <- if (is.null(config$params$min_cantidad_valores_ajuste_univariado)) 30 else
+  config$params$min_cantidad_valores_ajuste_univariado
+
 id_column <- IdentificarIdColumn(eventos)
 # Controlar que eventos tenga un id identificable
 if (! any(c("station_id", "point_id") %in% colnames(eventos)))
@@ -342,7 +347,8 @@ ajuste.univariado.x.ubic.var.dist <- task$run(number.of.processes = config$max.p
                                               input.values = ubicacion_x_variable_x_distribucion,  
                                               serie.observada = serie_observada_ajuste_univariado,
                                               umbral.p.valor = config$params$umbral.p.valor,
-                                              variables.discretas = config$params$variables_sin_test_continuidad)
+                                              variables.discretas = config$params$variables_sin_test_continuidad,
+                                              min.cantidad.valores = min_cantidad_valores)
 
 # Transformar resultados a un objeto de tipo tibble
 ajuste.univariado.x.ubic.var.dist <- ajuste.univariado.x.ubic.var.dist %>% purrr::map_dfr(~.x)
@@ -494,7 +500,8 @@ script$info("Generar series perturbadas y aplicarles el mejor ajuste")
 # Ejecutar tarea distribuida
 series.perturbadas.ajustadas <- task$run(number.of.processes = config$max.procesos,
                                          input.values = mejor_ajuste_x_serie_perturbada,  
-                                         series.perturbadas = series_perturbadas)
+                                         series.perturbadas = series_perturbadas,
+                                         min.cantidad.valores = min_cantidad_valores)
 
 # Transformar resultados a un objeto de tipo tibble
 series.perturbadas.ajustadas <- series.perturbadas.ajustadas %>% purrr::map_dfr(~.x)

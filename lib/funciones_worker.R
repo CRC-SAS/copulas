@@ -394,7 +394,7 @@ DeterminarEstacionariedad <- function(input.value, script, eventos.completos,
 }
 
 
-AplicarMejorAjusteASeriesPerturbadas <- function(input.value, script, series.perturbadas) {
+AplicarMejorAjusteASeriesPerturbadas <- function(input.value, script, series.perturbadas, min.cantidad.valores = 30) {
   # Identificar la columna con el id de la ubicación (usualmente station_id, o point_id)
   id_column <- IdentificarIdColumn(input.value)
   
@@ -433,7 +433,7 @@ AplicarMejorAjusteASeriesPerturbadas <- function(input.value, script, series.per
   } else if (input.value$mejor_ajuste %in% c('lmomentos', 'maxima.verosimilitud')) {
     ajuste <- tryCatch({
       do.call(what = input.value$funcion_mejor_ajuste,
-             args = list(x.prima, min.cantidad.valores = 30))
+             args = list(x.prima, min.cantidad.valores = min.cantidad.valores))
     }, error = function(e) {
       script$warn(glue::glue("Error al aplicar el mejor ajuste ({input.value$funcion_mejor_ajuste}) ",
                              "a la serie perturbada (variable=\"{input.value$variable}\", ",
@@ -503,7 +503,8 @@ MejorAjusteUnivariadoUV <- function(input.value, script, ajustes.univariados) {
 }
 
 
-AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.valor, variables.discretas = NULL) {
+AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.valor, variables.discretas = NULL,
+                                min.cantidad.valores = 30) {
   # Ubicación, variable y distribución 
   uvd <- input.value
   
@@ -536,8 +537,8 @@ AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.v
   configuracion <- uvd %>% 
     dplyr::select(distribucion, funcion_ajuste_lmomentos, funcion_ajuste_maxima_verosimilitud)
   
-  parametros.lmomentos            <- list(x = x, min.cantidad.valores = 30)
-  parametros.maxima.verosimilitud <- list(x = x, min.cantidad.valores = 30, numero.muestras = NULL)
+  parametros.lmomentos            <- list(x = x, min.cantidad.valores = min.cantidad.valores)
+  parametros.maxima.verosimilitud <- list(x = x, min.cantidad.valores = min.cantidad.valores, numero.muestras = NULL)
   
   ajuste.univariado <- AjusteUnivariadoConfig(x = x,
                                               umbral.p.valor = umbral.p.valor,
