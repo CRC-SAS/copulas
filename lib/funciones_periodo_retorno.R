@@ -83,7 +83,8 @@ CalcularGrillaPeriodoRetorno <- function(mvdc, N, n, grid_x, grid_y) {
 }
 
 GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs, enso_obs,
-                                    nombre_x, nombre_y, titulo, archivo_png) {
+                                    nombre_x, nombre_y, titulo, archivo_png,
+                                    categoria_obs = NULL) {
   enso <- ConstantesEnso()
   grid_x <- sort(unique(grilla$x))
   grid_y <- sort(unique(grilla$y))
@@ -109,6 +110,11 @@ GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs, enso_obs
   # del archivo ENSO) - se factoriza con todos los niveles conocidos para que
   # la leyenda muestre siempre el mismo orden/colores entre graficos, y solo
   # aparezca la entrada "NA" si realmente hay algun punto sin clasificar.
+  # Si se informa categoria_obs (ej. episodios ENSO con su propia categoria, ver
+  # columna categoria_episodio de los eventos), reemplaza a evento_enso para
+  # colorear los puntos con la misma paleta.
+  if (!is.null(categoria_obs) && !all(is.na(categoria_obs)))
+    enso_obs <- categoria_obs
   observados <- tibble::tibble(x = x_obs, y = y_obs,
                                evento_enso = factor(enso_obs, levels = enso$niveles))
 

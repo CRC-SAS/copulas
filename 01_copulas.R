@@ -191,6 +191,11 @@ clasificacion_enso <- ClasificarMesesEnso(eventos_enso)
 eventos <- eventos %>%
   dplyr::mutate(evento_enso = AsignarEventoEnso(fecha_inicio, clasificacion_enso))
 
+# Columna opcional categoria_episodio (ej. episodios ENSO con su propia categoria):
+# si el archivo de eventos no la trae, se agrega vacia
+if (!"categoria_episodio" %in% colnames(eventos))
+  eventos$categoria_episodio <- NA_character_
+
 # Cantidad minima de eventos para ajustar una distribucion univariada (30 si
 # no se define min_cantidad_valores_ajuste_univariado en el YAML de parametros)
 min_cantidad_valores <- if (is.null(config$params$min_cantidad_valores_ajuste_univariado)) 30 else
@@ -241,7 +246,7 @@ serie_observada <- eventos %>%
   dplyr::mutate(intensidad = abs(intensidad), magnitud = abs(magnitud),
                 duracion = abs(duracion), minimo = abs(minimo), maximo = abs(maximo)) %>%
   dplyr::select(realizacion, !!id_column, tipo_evento, conf_id, numero_evento,
-                fecha_inicio, evento_enso, intensidad, magnitud, duracion, minimo, maximo) %>%
+                fecha_inicio, evento_enso, categoria_episodio, intensidad, magnitud, duracion, minimo, maximo) %>%
   tidyr::pivot_longer(cols = c(intensidad, magnitud, duracion, minimo, maximo),
                       names_to = "variable", values_to = "valor") %>%
   dplyr::mutate(tipo_serie = "observada", n_serie = 0) %>% 
