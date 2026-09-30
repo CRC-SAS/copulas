@@ -10,20 +10,25 @@
 # azul; rampas monotonas en luminosidad dentro de cada rama) - ver
 # docs/superpowers si se necesita regenerar. Neutro va sin relleno (solo el
 # borde negro del punto) para que los eventos ENSO resalten sobre el heatmap.
-COLORES_ENSO <- c(
-  "Niño Muy Fuerte" = "#a50f15",
-  "Niño Fuerte"     = "#de2d26",
-  "Niño Moderado"   = "#fb6a4a",
-  "Niño Débil" = "#fcae91",
-  "Neutro"               = "transparent",
-  "Niña Débil" = "#bdd7e7",
-  "Niña Moderada"   = "#6baed6",
-  "Niña Fuerte"     = "#08519c"
-)
-NIVELES_ENSO <- names(COLORES_ENSO)
-# Neutro se dibuja como cuadrado (22) y el resto como circulo (21): asi los
-# neutros (sin relleno) no se confunden con los NA (circulo blanco)
-FORMAS_ENSO <- stats::setNames(ifelse(NIVELES_ENSO == "Neutro", 22, 21), NIVELES_ENSO)
+# Es una funcion (y no constantes globales) porque Task.R solo exporta a los
+# workers paralelos los objetos globales que son funciones.
+ConstantesEnso <- function() {
+  colores <- c(
+    "Niño Muy Fuerte" = "#a50f15",
+    "Niño Fuerte"     = "#de2d26",
+    "Niño Moderado"   = "#fb6a4a",
+    "Niño Débil" = "#fcae91",
+    "Neutro"               = "transparent",
+    "Niña Débil" = "#bdd7e7",
+    "Niña Moderada"   = "#6baed6",
+    "Niña Fuerte"     = "#08519c"
+  )
+  niveles <- names(colores)
+  # Neutro se dibuja como cuadrado (22) y el resto como circulo (21): asi los
+  # neutros (sin relleno) no se confunden con los NA (circulo blanco)
+  formas <- stats::setNames(ifelse(niveles == "Neutro", 22, 21), niveles)
+  list(colores = colores, niveles = niveles, formas = formas)
+}
 #
 # Formula (caso AND / co-occurrence, ambas variables superan simultaneamente
 # el umbral x,y):
@@ -79,6 +84,7 @@ CalcularGrillaPeriodoRetorno <- function(mvdc, N, n, grid_x, grid_y) {
 
 GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs, enso_obs,
                                     nombre_x, nombre_y, titulo, archivo_png) {
+  enso <- ConstantesEnso()
   grid_x <- sort(unique(grilla$x))
   grid_y <- sort(unique(grilla$y))
 
@@ -104,7 +110,7 @@ GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs, enso_obs
   # la leyenda muestre siempre el mismo orden/colores entre graficos, y solo
   # aparezca la entrada "NA" si realmente hay algun punto sin clasificar.
   observados <- tibble::tibble(x = x_obs, y = y_obs,
-                               evento_enso = factor(enso_obs, levels = NIVELES_ENSO))
+                               evento_enso = factor(enso_obs, levels = enso$niveles))
 
   p <- ggplot2::ggplot(grilla, ggplot2::aes(x = x, y = y)) +
     ggplot2::geom_raster(ggplot2::aes(fill = T), interpolate = TRUE) +
@@ -115,7 +121,9 @@ GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs, enso_obs
                                   name = "Período de\nretorno (años)",
                                   guide = ggplot2::guide_colourbar(
                                     direction = "vertical", order = 1,
-                                    theme = ggplot2::theme(legend.key.height = ggplot2::unit(10, "lines")))) +
+                                    theme = ggplot2::theme(legend.key.height = ggplot2::unit(10, "lines"))))
+
+  p <- p +
     # El heatmap de arriba ya usa la estetica "fill" (escala continua viridis);
     # ggnewscale permite una segunda escala "fill" independiente para los
     # puntos observados (escala discreta ENSO), en vez de compartir una sola
@@ -125,11 +133,11 @@ GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs, enso_obs
     # escalas en una unica leyenda "Intensidad ENSO"
     ggplot2::geom_point(data = observados, ggplot2::aes(x = x, y = y, fill = evento_enso, shape = evento_enso),
                         color = "black", size = 1.8, stroke = 0.4) +
-    ggplot2::scale_fill_manual(values = COLORES_ENSO, breaks = NIVELES_ENSO,
+    ggplot2::scale_fill_manual(values = enso$colores, breaks = enso$niveles,
                                name = "Intensidad ENSO",
                                na.value = "white", drop = TRUE,
                                guide = ggplot2::guide_legend(ncol = 1, order = 2)) +
-    ggplot2::scale_shape_manual(values = FORMAS_ENSO, breaks = NIVELES_ENSO,
+    ggplot2::scale_shape_manual(values = enso$formas, breaks = enso$niveles,
                                 name = "Intensidad ENSO",
                                 na.value = 21, drop = TRUE,
                                 guide = ggplot2::guide_legend(ncol = 1, order = 2)) +
