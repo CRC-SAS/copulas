@@ -84,7 +84,7 @@ CalcularGrillaPeriodoRetorno <- function(mvdc, N, n, grid_x, grid_y) {
 
 GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs, enso_obs,
                                     nombre_x, nombre_y, titulo, archivo_png,
-                                    categoria_obs = NULL) {
+                                    categoria_obs = NULL, colorear_enso = TRUE) {
   enso <- ConstantesEnso()
   grid_x <- sort(unique(grilla$x))
   grid_y <- sort(unique(grilla$y))
@@ -136,17 +136,22 @@ GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs, enso_obs
     # escala de fill para todo el grafico
     ggnewscale::new_scale_fill() +
     # fill y shape comparten name/breaks, por lo que ggplot fusiona ambas
-    # escalas en una unica leyenda "Intensidad ENSO"
-    ggplot2::geom_point(data = observados, ggplot2::aes(x = x, y = y, fill = evento_enso, shape = evento_enso),
-                        color = "black", size = 1.8, stroke = 0.4) +
-    ggplot2::scale_fill_manual(values = enso$colores, breaks = enso$niveles,
-                               name = "Intensidad ENSO",
-                               na.value = "white", drop = TRUE,
-                               guide = ggplot2::guide_legend(ncol = 1, order = 2)) +
-    ggplot2::scale_shape_manual(values = enso$formas, breaks = enso$niveles,
-                                name = "Intensidad ENSO",
-                                na.value = 21, drop = TRUE,
-                                guide = ggplot2::guide_legend(ncol = 1, order = 2)) +
+    # escalas en una unica leyenda "Intensidad ENSO". Con colorear_enso = FALSE
+    # los puntos son todos iguales y no hay leyenda ENSO.
+    (if (isTRUE(colorear_enso)) list(
+      ggplot2::geom_point(data = observados, ggplot2::aes(x = x, y = y, fill = evento_enso, shape = evento_enso),
+                          color = "black", size = 1.8, stroke = 0.4),
+      ggplot2::scale_fill_manual(values = enso$colores, breaks = enso$niveles,
+                                 name = "Intensidad ENSO",
+                                 na.value = "white", drop = TRUE,
+                                 guide = ggplot2::guide_legend(ncol = 1, order = 2)),
+      ggplot2::scale_shape_manual(values = enso$formas, breaks = enso$niveles,
+                                  name = "Intensidad ENSO",
+                                  na.value = 21, drop = TRUE,
+                                  guide = ggplot2::guide_legend(ncol = 1, order = 2)))
+     else
+      ggplot2::geom_point(data = observados, ggplot2::aes(x = x, y = y),
+                          shape = 21, fill = "white", color = "black", size = 1.8, stroke = 0.4)) +
     ggplot2::labs(x = EtiquetaVariable(nombre_x), y = EtiquetaVariable(nombre_y), title = titulo) +
     ggplot2::theme_minimal(base_size = 12) +
     # Ambas leyendas apiladas a la derecha (en vez de abajo) y margenes
