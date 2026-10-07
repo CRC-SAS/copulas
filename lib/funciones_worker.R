@@ -394,7 +394,7 @@ DeterminarEstacionariedad <- function(input.value, script, eventos.completos,
 }
 
 
-AplicarMejorAjusteASeriesPerturbadas <- function(input.value, script, series.perturbadas) {
+AplicarMejorAjusteASeriesPerturbadas <- function(input.value, script, series.perturbadas, min.cantidad.valores = 30) {
   # Identificar la columna con el id de la ubicación (usualmente station_id, o point_id)
   id_column <- IdentificarIdColumn(input.value)
   
@@ -433,7 +433,7 @@ AplicarMejorAjusteASeriesPerturbadas <- function(input.value, script, series.per
   } else if (input.value$mejor_ajuste %in% c('lmomentos', 'maxima.verosimilitud')) {
     ajuste <- tryCatch({
       do.call(what = input.value$funcion_mejor_ajuste,
-             args = list(x.prima, min.cantidad.valores = 30))
+             args = list(x.prima, min.cantidad.valores = min.cantidad.valores))
     }, error = function(e) {
       script$warn(glue::glue("Error al aplicar el mejor ajuste ({input.value$funcion_mejor_ajuste}) ",
                              "a la serie perturbada (variable=\"{input.value$variable}\", ",
@@ -503,7 +503,8 @@ MejorAjusteUnivariadoUV <- function(input.value, script, ajustes.univariados) {
 }
 
 
-AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.valor, variables.discretas = NULL) {
+AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.valor, variables.discretas = NULL,
+                                min.cantidad.valores = 30) {
   # Ubicación, variable y distribución 
   uvd <- input.value
   
@@ -536,8 +537,8 @@ AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.v
   configuracion <- uvd %>% 
     dplyr::select(distribucion, funcion_ajuste_lmomentos, funcion_ajuste_maxima_verosimilitud)
   
-  parametros.lmomentos            <- list(x = x, min.cantidad.valores = 30)
-  parametros.maxima.verosimilitud <- list(x = x, min.cantidad.valores = 30, numero.muestras = NULL)
+  parametros.lmomentos            <- list(x = x, min.cantidad.valores = min.cantidad.valores)
+  parametros.maxima.verosimilitud <- list(x = x, min.cantidad.valores = min.cantidad.valores, numero.muestras = NULL)
   
   ajuste.univariado <- AjusteUnivariadoConfig(x = x,
                                               umbral.p.valor = umbral.p.valor,
@@ -588,6 +589,7 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
   # evento_enso es un atributo por evento (no por variable): se toma del mismo
   # subconjunto/orden que x_obs, con el que queda alineado fila a fila
   enso_obs <- eventos_ubic %>% dplyr::filter(variable == uc$variable_x) %>% dplyr::pull(evento_enso)
+  categoria_obs <- eventos_ubic %>% dplyr::filter(variable == uc$variable_x) %>% dplyr::pull(categoria_episodio)
 
   # Grilla de evaluacion: desde el minimo observado hasta el maximo observado
   # + un margen (fraccion del rango observado), para poder ver isolineas mas
@@ -635,7 +637,8 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
 
     GraficarPeriodoRetorno(grilla_graf, niveles.anios, x_obs_graf, y_obs_graf, enso_obs,
                            nombre_x = nombre_x_graf, nombre_y = nombre_y_graf,
-                           titulo = titulo, archivo_png = archivo_png)
+                           titulo = titulo, archivo_png = archivo_png,
+                           categoria_obs = categoria_obs)
 
     list(archivo_png = archivo_png, grilla = grilla)
   }, error = function(e) {
