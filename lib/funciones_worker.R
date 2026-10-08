@@ -558,7 +558,8 @@ AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.v
 
 
 CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, eventos.completos,
-                                     niveles.anios, resolucion.grilla, margen.grilla, dir.salida.png) {
+                                     niveles.anios, resolucion.grilla, margen.grilla, dir.salida.png,
+                                     colorear.enso = TRUE) {
   # Ubicación y copula a analizar
   uc <- input.value
 
@@ -638,7 +639,7 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
     GraficarPeriodoRetorno(grilla_graf, niveles.anios, x_obs_graf, y_obs_graf, enso_obs,
                            nombre_x = nombre_x_graf, nombre_y = nombre_y_graf,
                            titulo = titulo, archivo_png = archivo_png,
-                           categoria_obs = categoria_obs)
+                           categoria_obs = categoria_obs, colorear_enso = colorear.enso)
 
     list(archivo_png = archivo_png, grilla = grilla)
   }, error = function(e) {

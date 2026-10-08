@@ -979,7 +979,8 @@ if (nrow(periodo_retorno_input) == 0) {
                               niveles.anios = config$params$periodo_retorno$niveles_anios,
                               resolucion.grilla = config$params$periodo_retorno$resolucion_grilla,
                               margen.grilla = config$params$periodo_retorno$margen_grilla,
-                              dir.salida.png = glue::glue("{config$dir$data}/output"))
+                              dir.salida.png = glue::glue("{config$dir$data}/output"),
+                              colorear.enso = !isFALSE(config$params$periodo_retorno$colorear_enso))
 
   # Transformar resultados a un objeto de tipo tibble
   periodo.retorno <- periodo.retorno %>% purrr::map_dfr(~.x)
