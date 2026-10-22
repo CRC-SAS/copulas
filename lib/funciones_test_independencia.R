@@ -37,7 +37,12 @@ TestIndCopulaEmpirica <- function(x, y) {
   
   # Correr test de independencia
   # Creaci?n de la distribuci?n del estad?stico
-  distribucion.estadistico <- copula::indepTestSim(n = length(x), p = 2, verbose = FALSE, N = 100)
+  # La distribucion se simula por Monte Carlo: se fija la semilla (restaurando la del proceso al terminar) para que el
+  # resultado sea reproducible; con N = 100 el p-valor cambiaba de una corrida a otra en los pares cercanos al umbral
+  semilla.previa <- if (exists(".Random.seed", envir = globalenv())) get(".Random.seed", envir = globalenv()) else NULL
+  on.exit(if (!is.null(semilla.previa)) assign(".Random.seed", semilla.previa, envir = globalenv()), add = TRUE)
+  set.seed(20261022)
+  distribucion.estadistico <- copula::indepTestSim(n = length(x), p = 2, verbose = FALSE, N = 1000)
   
   resultado.test <- copula::indepTest(matrix(c(x, y), ncol = 2, byrow = F), d = distribucion.estadistico)
   
@@ -78,7 +83,8 @@ SonDependientes <- function(x, y, tests.dependencia, umbral.p.valor) {
     .init = tibble::tibble(pasa.test = logical(), test.name = character(), p.value = double(), exec.error = logical())
   )
   
-  # Devolver resultados
-  return (resultados.tests)
+  # accumulate() devuelve la lista de resultados parciales (uno por test, mas el inicial);
+  # el resultado final es el ultimo elemento
+  return (dplyr::last(resultados.tests))
 }
 

@@ -135,7 +135,9 @@ EsEstacionaria <- function(x, fechas, tests.estacionariedad, umbral.p.valor) {
           do.call(what = func.name, args = list(x = x, fechas = fechas))) %>%
           dplyr::filter(parametro == "p.value") %>%
           dplyr::pull(valor)
-        if (is.na(p.value) || p.value > umbral.p.valor) 
+        # En todos los tests de estacionariedad la hipotesis nula es que la serie es estacionaria
+        # (sin autocorrelacion, sin punto de cambio, sin tendencia): el test se pasa si NO se rechaza H0
+        if (is.na(p.value) || p.value <= umbral.p.valor) 
           return (prev.result %>% dplyr::bind_rows(
             tibble::tibble(pasa.test = FALSE, test.name = test.name, p.value = p.value, exec.error = FALSE)))
         else
@@ -180,3 +182,23 @@ TestPuntoCambioMulti <- function(x, variable = c('duracion.prima', 'intensidad')
 
 
 
+
+# Umbral de p-valor a aplicar a CADA test de estacionariedad. Como la serie se considera estacionaria
+# solo si pasa los n.tests tests, con umbral individual alfa el error global (rechazar una serie
+# estacionaria) crece hasta 1-(1-alfa)^n.tests. La correccion de Bonferroni usa alfa/n.tests por test
+# para mantener el error global en alfa.
+#   correccion = "bonferroni": umbral / n.tests (valor por defecto si no se especifica)
+#   correccion = "ninguna":    umbral sin corregir
+UmbralEstacionariedad <- function(umbral, n.tests, correccion = "bonferroni") {
+  if (is.null(correccion)) correccion <- "bonferroni"
+  if (!correccion %in% c("bonferroni", "ninguna"))
+    stop("correccion.estacionariedad debe ser 'bonferroni' o 'ninguna'")
+  if (correccion == "bonferroni") return (umbral / max(n.tests, 1))
+  return (umbral)
+}
+
+# Consolida las realizaciones de una misma serie: estacionaria si lo es la mayoria (empate = estacionaria).
+# Atencion: con round(n/2) una sola realizacion (serie observada) siempre resultaba estacionaria, porque round(0.5) = 0
+ConsolidarEstacionariedad <- function(es.estacionaria) {
+  mean(es.estacionaria) >= 0.5
+}
