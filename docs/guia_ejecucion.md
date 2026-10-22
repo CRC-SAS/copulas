@@ -197,6 +197,26 @@ pisar resultados). Para cada tipo:
 
 Corré los tipos de a uno y revisá el log antes de lanzar el siguiente.
 
+### 5.6 Filtros de calidad y reuso de resultados
+
+Una cópula solo se ajusta si el par de variables pasa dos filtros: las variables
+son **dependientes** (tests de independencia) y las series son **estacionarias**
+(tests de `tests.estacionariedad`). Cuatro parámetros controlan el criterio:
+
+| Parámetro | Valor por defecto | Qué hace |
+|---|---|---|
+| `correccion.estacionariedad` | `bonferroni` | Una serie es estacionaria si pasa **todos** los tests. Con `bonferroni` el umbral de cada test es `umbral.p.valor` / cantidad de tests (0,05/5 = 0,01), para que la probabilidad de rechazar por azar una serie estacionaria no suba de ~5% a ~23%. Con `ninguna` se usa `umbral.p.valor` en cada test. |
+| `exigir.estacionariedad` | `true` | Con `true` solo se ajusta si ambas series son estacionarias. Con `false` se ajusta igual y la estacionariedad queda como información (columna `es_estacionaria` en `estacionariedad_*.rds`). |
+| `exigir.serie.observada` | `true` | Con `true` el par debe pasar los filtros con la serie **observada**, no solo con alguna de las series perturbadas. Con `false` alcanza con alguna perturbada (criterio original). |
+| `reusar.resultados` | `false` | Con `true` se recargan los ajustes univariados, las series perturbadas, la estacionariedad y los ajustes de cópulas de una corrida anterior (carpeta `data/output`) en vez de recalcularlos. Los ajustes que no pasan los filtros vigentes se anulan y los que ahora los pasan sin ajuste previo se ajustan. Solo es válido si los filtros nuevos son al menos tan estrictos como los de la corrida anterior. |
+
+`false` en los tres primeros relaja el criterio: si lo usás, documentá cuánto
+cambian los resultados respecto de la configuración por defecto. Para reusar
+resultados con `pruebas/correr_un_tipo_evento.sh`, definí `REUSAR_RESULTADOS=TRUE`.
+
+El test de independencia con cópula empírica usa una semilla fija, así que
+repetir la corrida da los mismos resultados.
+
 ## 6. ENSO (opcional)
 
 El pipeline relaciona los eventos con El Niño / La Niña a partir de
