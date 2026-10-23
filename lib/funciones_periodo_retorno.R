@@ -279,3 +279,38 @@ GraficarDistribucionUnivariada <- function(x_obs, distribucion, parametros,
 
   ggplot2::ggsave(filename = archivo_png, plot = p, width = 7.5, height = 5.5, dpi = 150)
 }
+
+
+# ------------------------------------------------------------------------------#
+# ---- Periodo de retorno combinado (duracion, intensidad) a partir de la copula
+# ---- duracion-magnitud. Como magnitud = duracion * intensidad (exacto),
+# ---- P(D > d, I > i) = P(D > d, M > i * D). Se simula del Mvdc ajustado
+# ---- (x = duracion, y = magnitud) y se cuenta la fraccion que cumple la condicion.
+# ---- Alternativa para las estaciones sin copula intensidad-duracion; ver
+# ---- scripts/presentacion/periodo_retorno_via_magnitud.R (validacion).
+# ------------------------------------------------------------------------------#
+
+# mvdc: Mvdc ajustado a (duracion, magnitud); d, i: vectores de igual largo (umbrales)
+# Devuelve P(D > d, I > i). Para duraciones enteras conviene d = k - 0.5 para "D >= k"
+# (correccion de continuidad; con d entero la probabilidad queda sobrestimada).
+ProbabilidadConjuntaViaMagnitud <- function(mvdc, d, i, nsim = 400000, semilla = 20261023) {
+  if (any(is.na(mvdc@copula@parameters))) stop("parameter is NA")
+  if (length(d) != length(i)) stop("d e i deben tener el mismo largo")
+  # Se fija la semilla (restaurando la del proceso al terminar) para que el resultado sea reproducible
+  semilla.previa <- if (exists(".Random.seed", envir = globalenv())) get(".Random.seed", envir = globalenv()) else NULL
+  on.exit(if (!is.null(semilla.previa)) assign(".Random.seed", semilla.previa, envir = globalenv()), add = TRUE)
+  set.seed(semilla)
+  u <- copula::rCopula(nsim, mvdc@copula)
+  qx <- get(paste0("q", mvdc@margins[1])); qy <- get(paste0("q", mvdc@margins[2]))
+  D <- do.call(qx, c(list(u[, 1]), mvdc@paramMargins[[1]]))
+  M <- do.call(qy, c(list(u[, 2]), mvdc@paramMargins[[2]]))
+  ok <- is.finite(D) & is.finite(M) & D > 0
+  I <- M[ok] / D[ok]; D <- D[ok]
+  mapply(function(dd, ii) mean(D > dd & I > ii), d, i)
+}
+
+# Periodo de retorno (anios) = N / (n * P), con N anios de registro y n eventos
+PeriodoRetornoViaMagnitud <- function(mvdc, d, i, N, n, nsim = 400000, semilla = 20261023) {
+  p <- ProbabilidadConjuntaViaMagnitud(mvdc, d, i, nsim, semilla)
+  return (N / (n * pmax(p, 1e-6)))
+}
