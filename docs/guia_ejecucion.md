@@ -217,6 +217,21 @@ resultados con `pruebas/correr_un_tipo_evento.sh`, definí `REUSAR_RESULTADOS=TR
 El test de independencia con cópula empírica usa una semilla fija, así que
 repetir la corrida da los mismos resultados.
 
+### 5.7 Correccion de continuidad de la duracion
+
+La duración es entera (días) y las distribuciones y cópulas son continuas: para el modelo, un evento de
+`k` días ocupa el intervalo (k − 0,5, k + 0,5). Por eso "duración de al menos `k` días" se evalúa en `k − 0,5`.
+Sin esa corrección, la probabilidad conjunta de "más de `k` días" queda sobrestimada entre 25 y 30 %
+y el período de retorno subestimado. El parámetro, en `parametros_copulas.yml`:
+
+```yaml
+periodo_retorno:
+  correccion_continuidad_duracion: true   # false = evaluar en k, sin corrección
+```
+
+Aplica a las variables llamadas `duracion` en el período de retorno bivariado y univariado. Los gráficos
+siguen mostrando la duración en días enteros: el eje no cambia, el 0,5 es solo parte del cálculo.
+
 ## 6. ENSO (opcional)
 
 El pipeline relaciona los eventos con El Niño / La Niña a partir de

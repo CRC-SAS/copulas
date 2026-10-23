@@ -574,7 +574,7 @@ AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.v
 
 CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, eventos.completos,
                                      niveles.anios, resolucion.grilla, margen.grilla, dir.salida.png,
-                                     colorear.enso = TRUE) {
+                                     colorear.enso = TRUE, correccion.continuidad.duracion = TRUE) {
   # Ubicación y copula a analizar
   uc <- input.value
 
@@ -626,7 +626,10 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
   # abortar todo el script: se atrapa, se informa como warning y esa fila
   # se degrada a resultado NA (sin archivo_png ni grilla).
   resultado <- tryCatch({
-    grilla <- CalcularGrillaPeriodoRetorno(mv, N, n, grid_x, grid_y)
+    # Correccion de continuidad: la duracion es entera (dias), el modelo es continuo; ver CalcularGrillaPeriodoRetorno
+    grilla <- CalcularGrillaPeriodoRetorno(mv, N, n, grid_x, grid_y,
+                                           desplazar_x = ifelse(correccion.continuidad.duracion && identical(uc$variable_x, "duracion"), 0.5, 0),
+                                           desplazar_y = ifelse(correccion.continuidad.duracion && identical(uc$variable_y, "duracion"), 0.5, 0))
 
     id_valor  <- dplyr::pull(uc, !!id_column)
     archivo_png <- glue::glue("{dir.salida.png}/periodo_retorno_{id_valor}_{uc$variable_x}_{uc$variable_y}.png")
@@ -671,7 +674,7 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
 
 CalcularPeriodoRetornoUV <- function(input.value, script, mejores.ajustes.univariados, eventos.completos,
                                      niveles.anios, resolucion.grilla, margen.grilla, dir.salida.png,
-                                     graficar.distribucion = FALSE) {
+                                     graficar.distribucion = FALSE, correccion.continuidad.duracion = TRUE) {
   # Ubicación y variable a analizar
   uv <- input.value
 
@@ -711,7 +714,8 @@ CalcularPeriodoRetornoUV <- function(input.value, script, mejores.ajustes.univar
   # Mismo criterio defensivo que CalcularPeriodoRetornoUC (ver fc17f05/373e1df):
   # un fallo puntual en una estacion+variable no debe abortar todo el script.
   resultado <- tryCatch({
-    grilla <- CalcularGrillaPeriodoRetornoUV(distribucion, parametros, N, n, grid_x)
+    grilla <- CalcularGrillaPeriodoRetornoUV(distribucion, parametros, N, n, grid_x,
+                                             desplazar_x = ifelse(correccion.continuidad.duracion && identical(uv$variable, "duracion"), 0.5, 0))
 
     archivo_png <- glue::glue("{dir.salida.png}/periodo_retorno_univariado_{id_valor}_{uv$variable}.png")
     titulo <- glue::glue("Período de retorno univariado - distribución {distribucion}\n",

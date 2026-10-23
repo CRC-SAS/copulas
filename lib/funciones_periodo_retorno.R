@@ -47,7 +47,11 @@ EtiquetaVariable <- function(variable) {
   Capitalizar(dplyr::recode(variable, duracion = "duración"))
 }
 
-CalcularGrillaPeriodoRetorno <- function(mvdc, N, n, grid_x, grid_y) {
+CalcularGrillaPeriodoRetorno <- function(mvdc, N, n, grid_x, grid_y, desplazar_x = 0, desplazar_y = 0) {
+  # desplazar_x / desplazar_y: correccion de continuidad para variables enteras (ej. duracion en dias). Un evento de k dias
+  # es, para el modelo continuo, una duracion en (k - 0.5, k + 0.5]: "duracion >= k" se evalua en k - 0.5 (desplazar = 0.5).
+  # Sin la correccion, P(D > k) incluye los eventos de k dias y la probabilidad queda sobrestimada (~25 a 30 %).
+  # grid_x / grid_y siguen siendo los valores a mostrar; el desplazamiento se aplica solo al evaluar el modelo.
   # La familia ganadora puede tener parametro NA (ver AplicarMejorAjusteACopulas
   # / fc17f05 / 373e1df). Para clayton/normal/t, pCopula/pMvdc abortan con
   # error ante un parametro NA (queda atrapado por el tryCatch del caller,
@@ -64,9 +68,9 @@ CalcularGrillaPeriodoRetorno <- function(mvdc, N, n, grid_x, grid_y) {
 
   grilla <- tidyr::crossing(x = grid_x, y = grid_y)
 
-  F_X  <- do.call(what = paste0("p", mvdc@margins[1]), args = c(list(q = grilla$x), mvdc@paramMargins[[1]]))
-  F_Y  <- do.call(what = paste0("p", mvdc@margins[2]), args = c(list(q = grilla$y), mvdc@paramMargins[[2]]))
-  F_XY <- copula::pMvdc(cbind(grilla$x, grilla$y), mvdc)
+  F_X  <- do.call(what = paste0("p", mvdc@margins[1]), args = c(list(q = grilla$x - desplazar_x), mvdc@paramMargins[[1]]))
+  F_Y  <- do.call(what = paste0("p", mvdc@margins[2]), args = c(list(q = grilla$y - desplazar_y), mvdc@paramMargins[[2]]))
+  F_XY <- copula::pMvdc(cbind(grilla$x - desplazar_x, grilla$y - desplazar_y), mvdc)
 
   # P(X>=x, Y>=y), acotada para evitar T infinito/negativo por errores de redondeo
   prob_conjunta <- pmax(1 - F_X - F_Y + F_XY, 1e-6)
@@ -196,8 +200,9 @@ GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs, enso_obs
 # Formula: T(x) = N / (n * (1 - F(x))), donde F es la distribucion ganadora
 # del mejor ajuste univariado (PASO 6) para esa estacion+variable.
 
-CalcularGrillaPeriodoRetornoUV <- function(distribucion, parametros, N, n, grid_x) {
-  F_X <- do.call(what = paste0("p", distribucion), args = c(list(q = grid_x), parametros))
+CalcularGrillaPeriodoRetornoUV <- function(distribucion, parametros, N, n, grid_x, desplazar_x = 0) {
+  # desplazar_x: correccion de continuidad para variables enteras (ver CalcularGrillaPeriodoRetorno)
+  F_X <- do.call(what = paste0("p", distribucion), args = c(list(q = grid_x - desplazar_x), parametros))
 
   # P(X>=x), acotada para evitar T infinito/negativo por errores de redondeo
   prob_excedencia <- pmax(1 - F_X, 1e-6)

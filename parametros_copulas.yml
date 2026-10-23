@@ -92,6 +92,10 @@ periodo_retorno:
   # Cuanto extender la grilla mas alla del maximo observado, como fraccion
   # del rango observado de cada variable (0 = no extender)
   margen_grilla: 0.4
+  # Correccion de continuidad para la duracion (entera, en dias): "duracion >= k" se evalua en k - 0.5 porque el modelo
+  # es continuo y un evento de k dias ocupa (k - 0.5, k + 0.5]. Sin la correccion (false) la probabilidad conjunta queda
+  # sobrestimada ~25 a 30 % y el periodo de retorno subestimado. En el grafico la duracion se sigue mostrando en dias enteros.
+  correccion_continuidad_duracion: true
   # Si es TRUE, ademas de la curva de periodo de retorno univariado (PASO 14)
   # genera por cada estacion+variable un histograma de los eventos observados
   # con la densidad de la distribucion ganadora superpuesta (analogo a la

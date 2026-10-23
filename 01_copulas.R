@@ -1050,7 +1050,8 @@ if (nrow(periodo_retorno_input) == 0) {
                               resolucion.grilla = config$params$periodo_retorno$resolucion_grilla,
                               margen.grilla = config$params$periodo_retorno$margen_grilla,
                               dir.salida.png = glue::glue("{config$dir$data}/output"),
-                              colorear.enso = !isFALSE(config$params$periodo_retorno$colorear_enso))
+                              colorear.enso = !isFALSE(config$params$periodo_retorno$colorear_enso),
+                              correccion.continuidad.duracion = !isFALSE(config$params$periodo_retorno$correccion_continuidad_duracion))
 
   # Transformar resultados a un objeto de tipo tibble
   periodo.retorno <- periodo.retorno %>% purrr::map_dfr(~.x)
@@ -1137,7 +1138,8 @@ if (nrow(periodo_retorno_univariado_input) == 0) {
                                          resolucion.grilla = config$params$periodo_retorno$resolucion_grilla,
                                          margen.grilla = config$params$periodo_retorno$margen_grilla,
                                          dir.salida.png = glue::glue("{config$dir$data}/output"),
-                                         graficar.distribucion = isTRUE(config$params$periodo_retorno$graficar_distribucion_ajuste))
+                                         graficar.distribucion = isTRUE(config$params$periodo_retorno$graficar_distribucion_ajuste),
+                                         correccion.continuidad.duracion = !isFALSE(config$params$periodo_retorno$correccion_continuidad_duracion))
 
   # Transformar resultados a un objeto de tipo tibble
   periodo.retorno.univariado <- periodo.retorno.univariado %>% purrr::map_dfr(~.x)
