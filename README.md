@@ -64,6 +64,8 @@ Rscript 01_copulas.R
 
 Los resultados quedan en `data/output/` y el avance en `run/CalcCopulas.log`.
 
+**Documentación en línea** (GitHub Pages, carpeta `docs/`): [guía de uso](docs/guia_de_uso.html) y [manual técnico](docs/manual_tecnico.html), con diagramas y fórmulas. Una vez habilitado Pages se ven en https://crc-sas.github.io/copulas/.
+
 **Guía completa, para quien nunca lo corrió:**
 [`docs/guia_ejecucion.md`](docs/guia_ejecucion.md) — una o varias estaciones,
 dónde indicar variables y tipos de evento, y uso opcional de ENSO.
