@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual técnico · Cópulas para eventos extremos</title>
+<link rel="stylesheet" href="assets/estilo.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css" integrity="sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV" crossorigin="anonymous">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js" integrity="sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8" crossorigin="anonymous"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js" integrity="sha384-+VBxd3r6XgURycqtZ117nYw44OOcIax56Z4dCRWbxyPt0Koah1uHoK0o4+/RRE05" crossorigin="anonymous"
+  onload="renderMathInElement(document.body, {delimiters: [{left: '$$', right: '$$', display: true}, {left: '\\(', right: '\\)', display: false}]});"></script>
+</head>
+<body>
+<header class="barra"><nav>
+  <strong>Cópulas · CRC-SAS</strong>
+  <a href="index.html">Inicio</a>
+  <a class="activo" href="manual_tecnico.html">Manual técnico</a>
+  <a href="guia_de_uso.html">Guía de uso</a>
+  <a href="https://github.com/CRC-SAS/copulas">Repositorio</a>
+</nav></header>
+
+<div class="pagina">
+<aside class="indice"><ol>
+  <li><a href="#resumen">1. Qué hace el pipeline</a></li>
+  <li><a href="#datos">2. Datos de entrada</a>
+    <ul><li><a href="#eventos">2.1 Eventos y variables</a></li><li><a href="#enso">2.2 Clasificación ENSO</a></li><li><a href="#perturbadas">2.3 Series perturbadas</a></li></ul></li>
+  <li><a href="#marginales">3. Distribuciones marginales</a>
+    <ul><li><a href="#candidatas">3.1 Candidatas y estimación</a></li><li><a href="#gof-uni">3.2 Bondad de ajuste</a></li><li><a href="#seleccion-uni">3.3 Selección</a></li></ul></li>
+  <li><a href="#estacionariedad">4. Estacionariedad</a></li>
+  <li><a href="#dependencia">5. Dependencia</a></li>
+  <li><a href="#copulas">6. Cópulas</a>
+    <ul><li><a href="#sklar">6.1 Teorema de Sklar</a></li><li><a href="#familias">6.2 Familias</a></li><li><a href="#estimacion">6.3 Estimación</a></li></ul></li>
+  <li><a href="#gof-cop">7. Bondad de ajuste y selección de la cópula</a></li>
+  <li><a href="#retorno">8. Período de retorno</a>
+    <ul><li><a href="#retorno-biv">8.1 Combinado</a></li><li><a href="#continuidad">8.2 Continuidad</a></li><li><a href="#retorno-uni">8.3 Univariado</a></li><li><a href="#via-magnitud">8.4 Vía duración–magnitud</a></li></ul></li>
+  <li><a href="#resultados">9. Qué pasó en la aplicación a temperaturas</a></li>
+  <li><a href="#limites">10. Limitaciones y observaciones</a></li>
+  <li><a href="#repro">11. Reproducibilidad</a></li>
+  <li><a href="#parametros">12. Parámetros</a></li>
+  <li><a href="#refs">13. Referencias</a></li>
+</ol></aside>
+
+<main>
+<h1>Manual técnico</h1>
+<p class="lead">Descripción climatológica, matemática y estadística del pipeline de cópulas, para quien necesite entenderlo, validarlo o continuarlo. Describe lo que hace el código de la rama principal, paso por paso. Para configurar y correr una corrida sin entrar en el detalle, ver la <a href="guia_de_uso.html">guía de uso</a>.</p>
+
+<!-- ============================================================ -->
+<h2 id="resumen">1. Qué hace el pipeline</h2>
+
+<p>Un evento extremo (una ola de calor, un período frío, una sequía) tiene varias características a la vez: cuánto dura, qué tan intenso es, cuánta magnitud acumula. Un análisis univariado pregunta, por ejemplo, «¿cada cuántos años se espera una ola de al menos 7 días?» o «¿cada cuántos años una con intensidad mayor que 3?». Pero lo que importa es la combinación: una ola larga <em>y</em> a la vez intensa es mucho más rara que cada cosa por separado, y cuánto más rara depende de cuánto se relacionan duración e intensidad.</p>
+
+<p>El pipeline responde esa pregunta para cada estación y cada par de variables con cuatro pasos:</p>
+<ol>
+  <li>Ajusta a cada variable su <strong>distribución marginal</strong> (qué valores toma y con qué frecuencia).</li>
+  <li>Verifica que los datos se puedan modelar así: que la serie de eventos sea <strong>estacionaria</strong> y que las dos variables sean <strong>dependientes</strong>.</li>
+  <li>Modela la dependencia con una <strong>cópula</strong> y elige la familia que mejor ajusta.</li>
+  <li>Combina cópula y marginales en una distribución conjunta y calcula el <strong>período de retorno</strong> de cada combinación de valores.</li>
+</ol>
+
+<figure>
+  <img src="assets/img/flujo_pipeline.svg" alt="Flujo del pipeline en seis etapas">
+  <figcaption>Figura 1. Las seis etapas. El script <code>01_copulas.R</code> las ejecuta en 14 pasos numerados.</figcaption>
+</figure>
+
+<table>
+<tr><th>Paso</th><th>Qué hace</th><th>Sección</th></tr>
+<tr><td>4</td><td>Lee y filtra eventos, asigna la fase ENSO, genera las series perturbadas</td><td><a href="#datos">2</a></td></tr>
+<tr><td>5, 6</td><td>Ajusta 13 distribuciones por variable y elige la mejor</td><td><a href="#marginales">3</a></td></tr>
+<tr><td>7</td><td>Aplica la mejor distribución a las series perturbadas</td><td><a href="#perturbadas">2.3</a></td></tr>
+<tr><td>8</td><td>Estacionariedad de cada serie (5 tests)</td><td><a href="#estacionariedad">4</a></td></tr>
+<tr><td>9</td><td>Dependencia de cada par (3 tests)</td><td><a href="#dependencia">5</a></td></tr>
+<tr><td>10</td><td>Ajusta 6 familias de cópulas a los pares que pasan los filtros</td><td><a href="#copulas">6</a></td></tr>
+<tr><td>11</td><td>Elige la mejor familia por ubicación y par</td><td><a href="#gof-cop">7</a></td></tr>
+<tr><td>12</td><td>Arma el objeto final: cópula + marginales</td><td><a href="#gof-cop">7</a></td></tr>
+<tr><td>13, 14</td><td>Período de retorno combinado y univariado, con gráficos</td><td><a href="#retorno">8</a></td></tr>
+</table>
+
+<div class="nota"><p><strong>Alcance.</strong> La identificación de los eventos a partir de las series diarias no forma parte de este repositorio. El pipeline recibe una tabla de eventos ya identificados (ver <a href="#eventos">2.1</a>). Tampoco genera las series sintéticas del generador estocástico: si el archivo las trae, las usa como realizaciones.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="datos">2. Datos de entrada</h2>
+
+<h3 id="eventos">2.1 Eventos y variables</h3>
+<p>La unidad de análisis es el <em>evento</em>: una fila con su fecha de inicio, su fecha de fin y sus métricas. Para cada ubicación y tipo de evento, la serie de eventos ordenada por fecha de inicio es la serie que se modela (no la serie diaria). Las variables disponibles son:</p>
+<table>
+<tr><th>Variable</th><th>Significado</th><th>Naturaleza</th></tr>
+<tr><td><code>duracion</code></td><td>Cantidad de pasos temporales (días en olas y períodos; pentadas en sequías)</td><td>Entera, con muchos empates</td></tr>
+<tr><td><code>intensidad</code></td><td>Intensidad media del evento: magnitud dividida por la duración</td><td>Continua</td></tr>
+<tr><td><code>magnitud</code></td><td>Intensidad acumulada durante el evento. Vale \(M = D \cdot I\) (duración por intensidad)</td><td>Continua</td></tr>
+<tr><td><code>minimo</code>, <code>maximo</code></td><td>Valor mínimo (o máximo) alcanzado por el evento</td><td>Continua</td></tr>
+</table>
+<p>Todas se toman en <strong>valor absoluto</strong> (<code>abs()</code>), de modo que olas de frío y de calor, o sequías, tengan la misma orientación y la dependencia esperada sea positiva. Esto importa más adelante: las familias de cópulas implementadas solo modelan dependencia positiva.</p>
+
+<p>En la aplicación a temperaturas extremas de Argentina (corrida <code>Olas_20</code>) hay seis tipos de evento, y cada uno es una corrida independiente:</p>
+<table>
+<tr><th>Tipo</th><th>Identificador</th><th>Estaciones</th></tr>
+<tr><td>Ola de calor (TX y TN)</td><td><code>OlaCalorTXyTN</code></td><td>69</td></tr>
+<tr><td>Ola de frío (TX y TN)</td><td><code>OlaFrioTXyTN</code></td><td>59</td></tr>
+<tr><td>Período cálido de TN</td><td><code>PeriodoCalidoTN</code></td><td>72</td></tr>
+<tr><td>Período cálido de TX</td><td><code>PeriodoCalidoTX</code></td><td>72</td></tr>
+<tr><td>Período frío de TN</td><td><code>PeriodoFrioTN</code></td><td>72</td></tr>
+<tr><td>Período frío de TX</td><td><code>PeriodoFrioTX</code></td><td>72</td></tr>
+</table>
+<p>TX es la temperatura máxima diaria y TN la mínima. Se usan eventos de duración mínima de 3 días. La estación 87420 se excluye del análisis de resultados, de modo que quedan 416 pares estación × tipo.</p>
+
+<h4>Qué filtra el pipeline al leer los eventos</h4>
+<ul>
+  <li><code>conf_id</code>: la configuración elegida en <code>configuraciones.eventos</code> (una sola por corrida).</li>
+  <li><code>realizacion &le; n.realizaciones</code>: realizaciones del generador a usar. Los datos observados corresponden a una sola.</li>
+  <li><code>tipo_evento</code> igual a <code>eventos.tipo</code> y <code>duracion &ge; eventos.duracion_minima</code>.</li>
+</ul>
+
+<h3 id="enso">2.2 Clasificación ENSO</h3>
+<p>A cada evento se le asigna la fase de El Niño–Oscilación del Sur vigente en el <em>mes de inicio</em>. La fuente es el índice RONI (Relative Oceanic Niño Index) en trimestres móviles solapados (DJF, JFM, …, NDJ). Cada trimestre trae su clasificación (Niño o Niña con intensidad débil, moderada, fuerte o muy fuerte, o neutro).</p>
+<p>Como los trimestres se solapan, un mismo mes calendario pertenece a hasta tres trimestres. La regla para resolver el mes (función <code>ClasificarGrupoEnso</code>) es:</p>
+<ul>
+  <li>Si entre los trimestres del mes hay al menos un Niño y ningún Niña, el mes es Niño con la primera categoría en orden cronológico.</li>
+  <li>Si hay al menos una Niña y ningún Niño, es Niña, con el mismo criterio.</li>
+  <li>En cualquier otro caso (solo neutros, o mezcla de Niño y Niña) el mes es Neutro.</li>
+</ul>
+<p>Los trimestres DJF y NDJ cruzan el límite de año y se corrigen con un desplazamiento de año. Los eventos fuera del rango del archivo quedan sin clasificar (<code>NA</code>). La fase ENSO no interviene en el ajuste: se usa para colorear los eventos observados en los gráficos de período de retorno (ver la <a href="#parametros">sección 12</a> para desactivarlo) y en los análisis posteriores.</p>
+
+<h3 id="perturbadas">2.3 Series observada y series perturbadas</h3>
+<p>Para cada ubicación y variable el pipeline trabaja con tres series: la <strong>observada</strong> (<code>n_serie = 0</code>) y <code>n.series.perturbadas</code> series <strong>perturbadas</strong> (2 por defecto). Una serie perturbada es la observada con un ruido uniforme pequeño sumado a cada valor:</p>
+$$ x'_i = x_i + v \cdot U_i, \qquad U_i \sim \mathrm{Uniforme}(0,\, v) $$
+<p>donde \(v\) es el <em>valor mínimo de detección</em> de la variable (<code>valores_minimos</code>: 1 para la duración y 0,1 para las demás). El ruido tiene dos propósitos:</p>
+<ol>
+  <li><strong>Romper empates.</strong> Las cópulas trabajan sobre rangos, y una duración entera con muchos valores repetidos produce rangos empatados. Los tests y los ajustes asumen variables continuas.</li>
+  <li><strong>Propagar la incertidumbre de la discretización.</strong> Se repite el ajuste en varias versiones de los datos, y el parámetro final de la cópula es la mediana entre ellas (sección <a href="#gof-cop">7</a>).</li>
+</ol>
+<p>La semilla (<code>s.series.perturbadas</code>, 123 por defecto) se guarda junto con los resultados para poder regenerar las mismas series.</p>
+<div class="nota"><p><strong>Dos usos distintos del ruido.</strong> Las distribuciones marginales se ajustan sobre la serie <em>observada</em> a la que se le agrega un jitter simétrico mínimo (solo a <code>duracion</code> y <code>minimo</code>, con la función <code>jitter()</code> de R, cuya amplitud es proporcional al menor salto entre valores distintos; para la duración entera es de ±0,4 días). Ese ruido es independiente del de las series perturbadas y no se agrega antes de generarlas. Las series perturbadas se ajustan también (paso 7) con la mejor distribución de cada variable, pero esos parámetros no intervienen en la cópula final, que usa las marginales de la serie observada.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="marginales">3. Distribuciones marginales</h2>
+<p>Una cópula describe solo la dependencia entre variables. Para obtener probabilidades de valores concretos hay que combinarla con la distribución de cada variable por separado. Cada variable, en cada ubicación, se ajusta con las mismas candidatas y se queda con la mejor (pasos 5 y 6).</p>
+
+<h3 id="candidatas">3.1 Candidatas y estimación</h3>
+<p>Hay 13 distribuciones habilitadas por defecto (columna <code>uso_sequias</code> de <code>parametros_copulas.yml</code>); el archivo define 26 en total y se habilitan editando esa columna.</p>
+<table>
+<tr><th>Código</th><th>Distribución</th><th>Código</th><th>Distribución</th></tr>
+<tr><td><code>exl</code></td><td>Exponencial</td><td><code>ln3</code></td><td>Log-normal de 3 parámetros</td></tr>
+<tr><td><code>gam</code></td><td>Gamma</td><td><code>nor</code></td><td>Normal</td></tr>
+<tr><td><code>gev</code></td><td>Valores extremos generalizada</td><td><code>pe3</code></td><td>Pearson tipo III</td></tr>
+<tr><td><code>glo</code></td><td>Logística generalizada</td><td><code>st3</code></td><td>t de Student con 3 grados de libertad</td></tr>
+<tr><td><code>gno</code></td><td>Normal generalizada</td><td><code>wei</code></td><td>Weibull</td></tr>
+<tr><td><code>gpa</code></td><td>Pareto generalizada</td><td><code>lap</code></td><td>Laplace</td></tr>
+<tr><td><code>gum</code></td><td>Gumbel</td><td></td><td></td></tr>
+</table>
+<p>Cada una se estima con dos métodos, de modo que hay hasta 26 ajustes candidatos por variable:</p>
+<ul>
+  <li><strong>L-momentos</strong> (Hosking, 1990), con el paquete <code>lmomco</code>: los parámetros se obtienen igualando los L-momentos muestrales (calculados sin sesgo) con los teóricos. Es robusto ante valores atípicos y bien comportado con muestras chicas.</li>
+  <li><strong>Máxima verosimilitud</strong>, con <code>fitdistrplus</code>, usando como valor inicial el ajuste por L-momentos.</li>
+</ul>
+<p>Si la variable tiene menos de <code>min_cantidad_valores_ajuste_univariado</code> valores (30 por defecto; la corrida de olas usó 20), no se ajusta ninguna distribución y los pares que la incluyen quedan sin cópula.</p>
+
+<h3 id="gof-uni">3.2 Bondad de ajuste univariada</h3>
+<p>Cada ajuste candidato se evalúa con dos clases de medidas.</p>
+<h4>Tests de hipótesis (filtran)</h4>
+<p>Los tres comparan la muestra con la distribución ajustada, con \(H_0\): «los datos provienen de esta distribución».</p>
+<ul>
+  <li><strong>Kolmogorov–Smirnov (KS):</strong> \(D_n = \sup_x |F_n(x) - F(x)|\), la mayor distancia entre la distribución empírica y la ajustada.</li>
+  <li><strong>Anderson–Darling (AD):</strong> \(A^2 = -n - \frac{1}{n}\sum_{i}(2i-1)\left[\ln F(x_{(i)}) + \ln\left(1 - F(x_{(n+1-i)})\right)\right]\). Pesa más las colas.</li>
+  <li><strong>Cramér–von Mises (CvM):</strong> \(W^2 = \frac{1}{12n} + \sum_i \left[F(x_{(i)}) - \frac{2i-1}{2n}\right]^2\), una distancia cuadrática integrada.</li>
+</ul>
+<p>El ajuste pasa si <strong>ninguno</strong> de los tres rechaza con \(\alpha = 0{,}05\) (\(p \ge\) umbral; un \(p\) faltante cuenta como rechazo). Los tres suponen una variable continua. Para variables discretas, como la duración en días enteros, rechazan sistemáticamente aunque el ajuste sea razonable, por eso las variables listadas en <code>variables_sin_test_continuidad</code> (en la aplicación a temperaturas, <code>duracion</code>) se saltean estos tests y el ajuste pasa automáticamente.</p>
+
+<h4>Medidas de cuantiles (ordenan)</h4>
+<ul>
+  <li><strong>RMSE/IQR:</strong> raíz del error cuadrático medio entre los cuantiles empíricos y los de la distribución ajustada (en las probabilidades 0,01; 0,11; …; 0,91), dividida por el rango intercuartílico de la muestra para hacerla adimensional. Menor es mejor.</li>
+  <li><strong>CCC</strong> (coeficiente de correlación de concordancia de Lin, 1989) entre cuantiles empíricos y ajustados en las probabilidades 0,01; 0,02; …; 0,99: \(\rho_c = \dfrac{2\,\mathrm{cov}(a,b)}{\sigma_a^2 + \sigma_b^2 + (\mu_a - \mu_b)^2}\). Vale 1 si los cuantiles coinciden. Mayor es mejor.</li>
+  <li><strong>QCOMHD</strong> (Wilcox et al., 2014): compara los cuantiles de la muestra con los de una muestra simulada del mismo tamaño desde la distribución ajustada, con el estimador de Harrell–Davis y bootstrap (501 réplicas), con corrección por comparaciones múltiples. El índice resumen es la fracción de los cuantiles superiores (\(\ge 0{,}5\)) donde no hay diferencia significativa.</li>
+</ul>
+
+<h3 id="seleccion-uni">3.3 Selección de la mejor distribución</h3>
+<p>Entre los ajustes que pasan los tests se elige el de <strong>menor RMSE/IQR</strong>. Solo si hubiera exactamente el mismo valor se desempata por mayor CCC y luego por el índice QCOMHD. En la práctica el criterio efectivo es el RMSE/IQR. Si ningún ajuste pasa los tests, la variable queda sin distribución (<code>NA</code>).</p>
+<figure>
+  <img src="assets/img/caso_marginales_uv.png" alt="Funciones de distribución acumulada de duración e intensidad con la marginal ajustada">
+  <figcaption>Figura 2. Marginales ajustadas en Buenos Aires (87585, períodos cálidos de TX): duración (Pareto generalizada) e intensidad (Weibull). Se ve la discretización de la duración.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="estacionariedad">4. Estacionariedad</h2>
+<p>El período de retorno \(T = N / (n P)\) supone que los eventos se comportan igual a lo largo de todo el registro: misma distribución, sin tendencia y sin memoria. Si esto no se cumple, el período de retorno de una combinación cambia con el tiempo y el valor calculado no representa a ninguna época. El pipeline verifica estas condiciones sobre cada serie de eventos con cinco tests. En todos la hipótesis nula \(H_0\) es la propiedad deseable, y la serie <em>pasa</em> el test si no se rechaza.</p>
+<table>
+<tr><th>Test</th><th>Función</th><th>\(H_0\)</th><th>Detecta</th></tr>
+<tr><td>Box–Ljung (3 rezagos)</td><td><code>stats::Box.test</code></td><td>Sin autocorrelación hasta el rezago 3</td><td>Memoria lineal: \(Q = n(n+2)\sum_{k=1}^{3}\hat\rho_k^2/(n-k) \sim \chi^2_3\)</td></tr>
+<tr><td>Punto de cambio univariado</td><td><code>npcp::cpDist</code>, método secuencial</td><td>La distribución es la misma en toda la serie</td><td>Un quiebre en nivel o en forma de la distribución</td></tr>
+<tr><td>Punto de cambio de la autocópula</td><td><code>npcp::cpAutocop</code>, rezago 1</td><td>La dependencia entre eventos consecutivos no cambia</td><td>Un cambio en la dependencia serial</td></tr>
+<tr><td>Mann–Kendall</td><td><code>Kendall::MannKendall</code></td><td>Sin tendencia monótona</td><td>Aumento o disminución sostenidos</td></tr>
+<tr><td>Independencia serial empírica</td><td><code>copula::serialIndepTest</code>, hasta 10 rezagos</td><td>Los eventos son serialmente independientes</td><td>Dependencia serial de cualquier forma (no solo lineal)</td></tr>
+</table>
+<p>Los de punto de cambio son test secuenciales (Bücher, Kojadinovic y colaboradores) con bootstrap multiplicador; el empírico usa 100 simulaciones de la distribución nula del estadístico.</p>
+
+<h3>Umbral con corrección de Bonferroni</h3>
+<p>Una serie es estacionaria solo si pasa <strong>los cinco</strong>. Con un umbral \(\alpha\) en cada test, la probabilidad de rechazar por azar una serie que sí es estacionaria sube a \(1-(1-\alpha)^5\), que con \(\alpha = 0{,}05\) es del 22,6 %. La corrección de Bonferroni usa \(\alpha/5 = 0{,}01\) en cada test, y deja el error global en alrededor del 4,9 %. Es el valor por defecto (<code>correccion.estacionariedad: bonferroni</code>; con <code>ninguna</code> se usa \(\alpha\) en cada test). Como los tests no son independientes, la corrección es conservadora (rechaza menos de lo nominal).</p>
+<figure>
+  <img src="assets/img/bonferroni.png" alt="Rechazo por test con y sin corrección, y porcentaje de series estacionarias">
+  <figcaption>Figura 3. Efecto de la corrección sobre las 832 series observadas de los seis tipos de evento: con 0,05 en cada test pasan el 69 %, con la corrección pasan el 88 %.</figcaption>
+</figure>
+
+<h3>Cómo se evalúa y se consolida</h3>
+<ul>
+  <li>Los tests se aplican <strong>en secuencia</strong> y el primero que rechaza corta la evaluación: los siguientes no se calculan. Por eso el resultado guardado no contiene siempre los cinco p-valores.</li>
+  <li>Un test que da error o devuelve p-valor faltante cuenta como rechazo.</li>
+  <li>Se evalúa cada serie (ubicación, variable, serie observada o perturbada, realización). Si hay varias realizaciones, la serie es estacionaria si lo es la mayoría (<code>ConsolidarEstacionariedad</code>: promedio \(\ge 0{,}5\); un empate favorece a la estacionariedad).</li>
+  <li>Un <strong>par</strong> de variables es estacionario si lo son las dos series.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="dependencia">5. Dependencia</h2>
+<p>Si dos variables son independientes, su cópula es el producto \(C(u,v) = uv\), y ajustar una familia de cópulas es innecesario o engañoso. Antes de ajustar se comprueba que haya dependencia con tres tests, aplicados en secuencia sobre cada par (\(H_0\): independencia). El par <em>pasa</em> si cada test rechaza con \(p \le 0{,}05\).</p>
+<table>
+<tr><th>Test</th><th>Mide</th><th>Detecta</th></tr>
+<tr><td>Kendall (<code>cor.test</code>)</td><td>\(\tau = \dfrac{\#\text{concordantes} - \#\text{discordantes}}{\binom{n}{2}}\)</td><td>Dependencia monótona (de rangos)</td></tr>
+<tr><td>Spearman (<code>cor.test</code>)</td><td>Correlación de los rangos</td><td>Dependencia monótona</td></tr>
+<tr><td>Cópula empírica (<code>copula::indepTest</code>)</td><td>Distancia entre la cópula empírica \(C_n\) y el producto \(uv\) (Genest y Rémillard, 2004)</td><td>Dependencia de cualquier forma. Distribución nula por Monte Carlo con 1000 simulaciones</td></tr>
+</table>
+<p>Los dos primeros son casi equivalentes, y el tercero es el más general. En este caso <strong>no</strong> hay corrección por tests múltiples: se usa \(\alpha = 0{,}05\) en cada uno. La distribución del estadístico del tercer test se simula con una semilla fija (20261022) para que dos corridas den el mismo resultado.</p>
+<figure>
+  <img src="assets/img/dependencia_tests.png" alt="Porcentaje de pares que pasan o rechazan cada test de dependencia">
+  <figcaption>Figura 4. Dependencia en las 416 combinaciones estación × tipo: pasan los tres tests el 62 %. En las olas pasan solo el 19 % y en los períodos el 81 %. Spearman no rechaza ningún par que haya pasado Kendall.</figcaption>
+</figure>
+<div class="ojo"><p><strong>Solo dependencia positiva.</strong> Los tests de dependencia son bilaterales, y un par con dependencia negativa los pasa. Sin embargo, todas las familias implementadas exigen \(\tau > 0\) (<code>stopifnot(tau &gt; 0)</code> al ajustar), de modo que un par con dependencia significativa pero negativa termina sin cópula. Con las variables de este pipeline (duración, intensidad, magnitud), todas en valor absoluto, es lo esperado.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="copulas">6. Cópulas</h2>
+
+<h3 id="sklar">6.1 Teorema de Sklar</h3>
+<p>Para un vector aleatorio \((X, Y)\) con marginales continuas \(F_X, F_Y\), existe una única función \(C\), la <strong>cópula</strong>, tal que</p>
+$$ H(x, y) = P(X \le x,\, Y \le y) = C\big(F_X(x),\, F_Y(y)\big). $$
+<p>La cópula es la distribución conjunta de las variables ya transformadas a uniformes \((U, V) = (F_X(X), F_Y(Y))\). Separa lo que cada variable hace por sí sola (las marginales) de cómo se relacionan (la cópula). Eso permite elegir la mejor marginal de cada variable sin que condicione la forma de la dependencia, y reconstruir después la distribución conjunta.</p>
+<figure>
+  <img src="assets/img/de_datos_a_copula.png" alt="De los datos a los rangos y a la cópula ajustada">
+  <figcaption>Figura 5. Los datos (73 períodos cálidos), sus rangos (las duraciones repetidas forman columnas) y una muestra simulada de la cópula ajustada.</figcaption>
+</figure>
+<p>La unicidad exige marginales <em>continuas</em>. Con la duración en días enteros no se cumple estrictamente, y de ahí vienen las series perturbadas (<a href="#perturbadas">2.3</a>) y la corrección de continuidad (<a href="#continuidad">8.2</a>).</p>
+
+<h3 id="familias">6.2 Familias implementadas</h3>
+<p>Se ajustan seis familias. Cuatro son arquimedianas (definidas por un generador \(\varphi\), con \(C(u,v) = \varphi^{-1}(\varphi(u)+\varphi(v))\)) y dos son elípticas. La diferencia que más importa en la práctica es la <strong>dependencia de cola</strong>: la probabilidad de que una variable sea extrema <em>dado</em> que la otra lo es,</p>
+$$ \lambda_U = \lim_{q\to 1^-} P(V > q \mid U > q), \qquad \lambda_L = \lim_{q\to 0^+} P(V \le q \mid U \le q). $$
+<table>
+<tr><th>Familia</th><th>\(C(u,v)\)</th><th>Parámetro</th><th>\(\tau\)</th><th>Cola</th></tr>
+<tr><td>Gumbel</td><td>\(\exp\!\left\{-\left[(-\ln u)^\theta + (-\ln v)^\theta\right]^{1/\theta}\right\}\)</td><td>\(\theta \ge 1\)</td><td>\(1 - 1/\theta\)</td><td>Superior: \(\lambda_U = 2 - 2^{1/\theta}\)</td></tr>
+<tr><td>Joe</td><td>\(1 - \left[(1-u)^\theta + (1-v)^\theta - (1-u)^\theta(1-v)^\theta\right]^{1/\theta}\)</td><td>\(\theta \ge 1\)</td><td>Creciente en \(\theta\)</td><td>Superior: \(\lambda_U = 2 - 2^{1/\theta}\)</td></tr>
+<tr><td>Clayton</td><td>\(\left(u^{-\theta} + v^{-\theta} - 1\right)^{-1/\theta}\)</td><td>\(\theta > 0\)</td><td>\(\theta/(\theta+2)\)</td><td>Inferior: \(\lambda_L = 2^{-1/\theta}\)</td></tr>
+<tr><td>Frank</td><td>\(-\dfrac{1}{\theta}\ln\!\left[1 + \dfrac{(e^{-\theta u}-1)(e^{-\theta v}-1)}{e^{-\theta}-1}\right]\)</td><td>\(\theta \ne 0\)</td><td>\(1 - \frac{4}{\theta}\left[1 - D_1(\theta)\right]\)</td><td>Ninguna</td></tr>
+<tr><td>Normal</td><td>\(\Phi_\rho\!\left(\Phi^{-1}(u), \Phi^{-1}(v)\right)\)</td><td>\(\rho \in (-1, 1)\)</td><td>\(\frac{2}{\pi}\arcsin\rho\)</td><td>Ninguna</td></tr>
+<tr><td>t de Student</td><td>\(t_{\rho,\nu}\!\left(t_\nu^{-1}(u), t_\nu^{-1}(v)\right)\)</td><td>\(\rho\); \(\nu = 4\) fijo</td><td>\(\frac{2}{\pi}\arcsin\rho\)</td><td>Ambas: \(\lambda_U = \lambda_L = 2\,t_{\nu+1}\!\left(-\sqrt{\tfrac{(\nu+1)(1-\rho)}{1+\rho}}\right)\)</td></tr>
+</table>
+<p>(\(D_1\) es la función de Debye de orden 1.) Hay una séptima, Ali–Mikhail–Haq (<code>AjustarCopulaAMH</code>), implementada pero no incluida en la tabla de configuración: solo cubre dependencias débiles (\(\tau \le 1/3\)).</p>
+<figure>
+  <img src="assets/img/tipos_copulas.png" alt="Muestras simuladas de cópulas sin cola, con cola superior, inferior y ambas">
+  <figcaption>Figura 6. Los cuatro comportamientos de cola, con muestras simuladas del mismo \(\tau\). La cola superior es la relevante para extremos de calor: indica que los eventos largos tienden a ser también intensos.</figcaption>
+</figure>
+
+<h3 id="estimacion">6.3 Estimación del parámetro</h3>
+<ol>
+  <li><strong>Pseudo-observaciones.</strong> Los datos (en valor absoluto) se pasan a rangos normalizados \(u_i = R_i/(n+1)\) (<code>copula::pobs</code>), con empates resueltos <em>al azar</em> (<code>ties.method = "random"</code>). Así no hace falta conocer las marginales para ajustar la cópula (método semiparamétrico).</li>
+  <li><strong>Valor inicial.</strong> Inversión de la relación entre \(\tau\) de Kendall y el parámetro (<code>initOpt</code>, método <code>tau.mean</code>).</li>
+  <li><strong>Máxima pseudo-verosimilitud</strong> (<code>copula::fitCopula</code>): se maximiza \(\ell(\theta) = \sum_{i=1}^n \ln c_\theta(u_i, v_i)\), donde \(c_\theta\) es la densidad de la cópula. Para Gumbel el parámetro se acota en \(\theta \ge 1{,}0001\). Para la t, los grados de libertad se fijan en 4 y solo se estima \(\rho\).</li>
+  <li><strong>Validación.</strong> Salvo en la t, el estimador debe quedar dentro de su intervalo de confianza (<code>confint</code>); si no, el ajuste se considera fallido.</li>
+</ol>
+<p>Si algo falla en un ajuste puntual (\(\tau \le 0\), no convergencia, parámetro fuera de rango), el error se atrapa, se informa como advertencia y ese ajuste queda sin resultado. No aborta la corrida.</p>
+
+<!-- ============================================================ -->
+<h2 id="gof-cop">7. Bondad de ajuste y selección de la cópula</h2>
+<figure>
+  <img src="assets/img/filtros_decision.svg" alt="Qué pasa con cada par: estacionariedad, dependencia, ajuste de familias, mejor familia y período de retorno">
+  <figcaption>Figura 7. Camino de cada par de variables. Con los valores por defecto, un par solo llega a la cópula si las series <em>observadas</em> pasan los filtros.</figcaption>
+</figure>
+
+<h3>Cuándo se ajusta</h3>
+<p>Para cada ubicación y par se ajustan las seis familias a tres series (la observada y las dos perturbadas), siempre que se cumpla:</p>
+<ol>
+  <li>Las variables son dependientes en esa serie.</li>
+  <li>Las dos series son estacionarias (se puede relajar con <code>exigir.estacionariedad: false</code>).</li>
+  <li>La <strong>serie observada</strong> del par ya pasó ambas condiciones (<code>exigir.serie.observada: true</code>). Las perturbadas solo dan robustez al ajuste: no habilitan una cópula que la serie real no justifica. Con <code>false</code> alcanza con que pase alguna perturbada, que era el criterio original.</li>
+</ol>
+
+<h3>Medidas de bondad de ajuste</h3>
+<table>
+<tr><th>Medida</th><th>Definición</th><th>Se usa para</th></tr>
+<tr><td><strong>Sn</strong> (Genest, Rémillard y Beaudoin, 2009)</td>
+  <td>Distancia de Cramér–von Mises entre la cópula empírica y la ajustada: \(S_n = \sum_{i=1}^n\left[C_n(u_i, v_i) - C_{\hat\theta}(u_i, v_i)\right]^2\). Su p-valor sale de un bootstrap paramétrico con 1000 réplicas, re-estimando la cópula en cada una (pseudo-verosimilitud, optimizador BFGS). \(H_0\): la familia es correcta.</td>
+  <td>Test de hipótesis y primer criterio de orden</td></tr>
+<tr><td><strong>AIC</strong></td><td>\(-2\ell + 2k\), con \(k\) parámetros. Premia el ajuste y penaliza la complejidad. Menor es mejor.</td><td>Orden</td></tr>
+<tr><td><strong>BIC</strong></td><td>\(-2\ell + k \ln m\) (ver nota sobre \(m\))</td><td>Desempate</td></tr>
+<tr><td><strong>MRE</strong> y <strong>RMSE</strong></td><td>Se simulan 1000 puntos de la cópula ajustada, y se compara su cópula empírica con la teórica evaluadas en puntos al azar: error relativo medio (%) y raíz del error cuadrático medio (%).</td><td>Desempate</td></tr>
+<tr><td><strong>Validación cruzada</strong></td><td>Criterio de verosimilitud por validación cruzada de <code>copula::xvCopula</code>. Menor es mejor.</td><td>Desempate</td></tr>
+</table>
+<p>Con la configuración de la aplicación a temperaturas (<code>variables_sin_test_continuidad: ["duracion"]</code>) el test Sn <strong>se omite</strong> en todo par que incluya la duración, porque el optimizador falla con variables casi discretas (<em>non-finite finite-difference value</em>; ver la guía de uso). La selección queda entonces determinada por AIC.</p>
+
+<h3>Elección de la familia ganadora</h3>
+<p>Para cada ubicación y par, las seis familias se ordenan comparando la <strong>mediana</strong>, entre las series (observada y perturbadas), de cada medida. El orden de prioridad es: mayor p-valor de Sn; luego menor AIC; luego menor BIC; luego MRE, RMSE y validación cruzada. Con Sn omitido, la primera comparación es un empate para todas las familias y decide el AIC.</p>
+
+<h3>Parámetro final y distribución conjunta</h3>
+<p>Con la familia ganadora, el parámetro final es la <strong>mediana</strong> de los parámetros estimados en cada serie en que el ajuste fue posible (la observada y las perturbadas). Se arma entonces un objeto <code>copula::mvdc</code>: la cópula con ese parámetro, más las dos marginales ganadoras de la sección 3. Ese objeto es la distribución conjunta de \((X, Y)\) y es lo que usa el período de retorno.</p>
+<div class="nota"><p>Los resultados quedan en <code>data/output/copulas_&lt;id&gt;.rds</code> (resultado final por ubicación y par), <code>mejores_ajustes_multivariados_&lt;id&gt;.rds</code> y <code>ajustes_multivariados_&lt;id&gt;.rds</code> (todas las familias y series).</p></div>
+
+<!-- ============================================================ -->
+<h2 id="retorno">8. Período de retorno</h2>
+
+<h3 id="retorno-biv">8.1 Período de retorno combinado</h3>
+<p>El período de retorno es el tiempo medio entre eventos que superan un umbral. Si los eventos ocurren a una tasa \(\lambda = n/N\) (eventos por año) y cada uno supera el umbral con probabilidad \(P\), los eventos que lo superan ocurren a tasa \(\lambda P\), y</p>
+$$ T = \frac{1}{\lambda P} = \frac{N}{n\,P}. $$
+<p>Para el caso conjunto (<em>co-occurrence</em>, o «y»), \(P\) es la probabilidad de que un evento supere a la vez \(x\) en la primera variable e \(y\) en la segunda. Con las marginales \(F_X, F_Y\) y la cópula \(C\):</p>
+$$ P(X \ge x,\, Y \ge y) = 1 - F_X(x) - F_Y(y) + C\big(F_X(x),\, F_Y(y)\big), $$
+$$ T(x,y) = \frac{N}{n\,\big[1 - F_X(x) - F_Y(y) + C(F_X(x), F_Y(y))\big]}. $$
+<p>Es el análogo de la Figura 7 de Chen et al. (2024). El pipeline evalúa \(T\) en una grilla de 100 × 100 puntos (<code>resolucion_grilla</code>) que va del mínimo observado hasta el máximo más un 40 % del rango (<code>margen_grilla</code>), y dibuja las isolíneas de 2, 5, 10, 20, 50, 100, 200 y 500 años sobre los eventos observados.</p>
+<figure>
+  <img src="assets/img/periodo_retorno_esquema.svg" alt="Esquema del período de retorno combinado">
+  <figcaption>Figura 8. La región de interés es la esquina superior derecha: eventos que superan los dos umbrales a la vez.</figcaption>
+</figure>
+<p><strong>\(N\) y \(n\).</strong> \(n\) es la cantidad de eventos observados de la ubicación, y \(N\) la extensión del registro en años, calculada como la diferencia entre la fecha de inicio del primer y del último evento dividida por 365,25. Por lo tanto \(N\) depende de los datos de eventos, no de la longitud del registro diario. La probabilidad conjunta se acota inferiormente en \(10^{-6}\) para evitar valores infinitos por redondeo.</p>
+<figure>
+  <img src="assets/img/caso_isolineas_calor.png" alt="Isolíneas de período de retorno combinado en Buenos Aires">
+  <figcaption>Figura 9. Buenos Aires (87585), períodos cálidos de TX. Un período de 5 días o más (evaluado en 4,5) con intensidad mayor que 2 tiene \(T \approx 3{,}0\) años; con independencia, 3,7 años.</figcaption>
+</figure>
+
+<h3 id="continuidad">8.2 Corrección de continuidad para la duración</h3>
+<p>La duración es entera, pero las distribuciones y cópulas son continuas. Para el modelo, un evento de \(k\) días ocupa el intervalo \((k-0{,}5,\, k+0{,}5]\). La frase «duración de al menos \(k\) días» equivale entonces a «duración \(> k - 0{,}5\)», así que se evalúa la marginal en \(k - 0{,}5\). Sin la corrección se evaluaría en \(k\), la probabilidad conjunta incluiría a los eventos de exactamente \(k\) días con peso incompleto y la probabilidad quedaría sobrestimada entre 25 y 30 % (el período de retorno subestimado). Se controla con <code>periodo_retorno.correccion_continuidad_duracion</code> (<code>true</code> por defecto). El eje de los gráficos sigue en días enteros; el 0,5 es solo parte del cálculo.</p>
+<p>Ejemplo: en 87585 con duración ≥ 5 se evalúa en 4,5; \(F_X(4{,}5) = 0{,}763\), de modo que la probabilidad de «5 días o más» es 0,237 en el modelo, frente a 0,264 en los datos (38 de 144).</p>
+
+<h3 id="retorno-uni">8.3 Período de retorno univariado</h3>
+<p>Para una sola variable, \(T(x) = \dfrac{N}{n\,[1 - F(x)]}\). El gráfico superpone los eventos observados en posición de graficación de Weibull: para el evento de rango \(m\) (1 = el mayor), \(T_{\mathrm{emp}} = \dfrac{N (n+1)}{n\, m}\). Si la distribución ajustada es adecuada, la curva sigue a los puntos. Opcionalmente (<code>graficar_distribucion_ajuste</code>) se genera un histograma con la densidad ganadora.</p>
+
+<h3 id="via-magnitud">8.4 Período de retorno vía duración–magnitud</h3>
+<p>Las estaciones sin cópula intensidad–duración pueden tener cópula duración–magnitud (ver el <a href="#resultados">balance</a>). Como \(M = D \cdot I\) exactamente, \(P(D > d,\, I > i) = P(D > d,\, M > i\,D)\). La función <code>ProbabilidadConjuntaViaMagnitud</code> lo calcula por simulación: genera 400 000 pares \((u, v)\) de la cópula, los lleva a \((D, M)\) con las marginales, forma \(I = M/D\), y cuenta la fracción de pares que cumple la condición. Se fija una semilla (20261023) para que el resultado se repita.</p>
+<figure>
+  <img src="assets/img/via_magnitud_validacion.png" alt="Validación del cálculo vía duración–magnitud">
+  <figcaption>Figura 10. Validación: donde existen las dos cópulas los cálculos coinciden (mediana del cociente 0,96), y la frecuencia esperada se ajusta a la observada (cociente observados/esperados entre 1,01 y 1,08, contra 1,16 a 1,43 con independencia).</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="resultados">9. Qué pasó en la aplicación a temperaturas</h2>
+<p>Corrida <code>Olas_20</code>: 6 tipos de evento, 73 estaciones menos exclusiones, par intensidad–duración, con los valores por defecto de los filtros (Bonferroni, serie observada, estacionariedad exigida).</p>
+<figure>
+  <img src="assets/img/embudo.png" alt="Cuántos pares pasan cada filtro hasta tener cópula">
+  <figcaption>Figura 11. De 416 pares estación × tipo, 258 pasan dependencia, 330 pasan estacionariedad y 196 pasan las dos y tienen cópula ganadora.</figcaption>
+</figure>
+<table>
+<tr><th>Resultado</th><th>Olas</th><th>Períodos</th></tr>
+<tr><td>Pares estación × tipo</td><td>128</td><td>288</td></tr>
+<tr><td>Pasan dependencia (3 tests)</td><td>24 (19 %)</td><td>234 (81 %)</td></tr>
+<tr><td>Pasan estacionariedad</td><td>112</td><td>218</td></tr>
+<tr><td>Pasan las dos (con cópula ganadora)</td><td>22</td><td>174</td></tr>
+</table>
+<p>Las olas pasan poco el filtro de dependencia: Kendall rechaza el 72 % de los pares de olas (92 de 128) frente al 16 % de los períodos (45 de 288). Una causa probable es el tamaño de la muestra: las olas tienen pocas decenas de eventos por estación, y con tan pocos datos los tests tienen poca potencia para detectar una dependencia moderada.</p>
+<p>La cola de la cópula ganadora cambia con el tamaño de la muestra: el 27 % de los ajustes de períodos (mediana de 144 eventos por estación) tienen cola, y el 50 % en las olas.</p>
+<figure>
+  <img src="assets/img/mapa_olas_copula.png" alt="Mapa de estaciones con cópula intensidad-duración en olas de calor y de frío">
+  <figcaption>Figura 12. Estaciones con cópula intensidad–duración en olas de calor (rojo) y de frío (azul). El círculo vacío indica olas sin cópula que pasó los filtros.</figcaption>
+</figure>
+<p>La vía duración–magnitud aporta cópulas en estaciones donde el par intensidad–duración no pasó los filtros: para las olas de calor suma 43 estaciones (de 15 a 58 de 69) y para las de frío 40 (de 7 a 47 de 59).</p>
+
+<!-- ============================================================ -->
+<h2 id="limites">10. Limitaciones y observaciones</h2>
+<p>Esta sección reúne los supuestos del método y las observaciones que surgieron al revisar el código. Las dos primeras son propias de la metodología; el resto son detalles de implementación que conviene conocer antes de validar o extender el pipeline.</p>
+
+<h3>Supuestos del método</h3>
+<ul>
+  <li><strong>Tasa de eventos constante.</strong> \(T = N/(nP)\) supone \(\lambda = n/N\) constante. Si la frecuencia de eventos tiene tendencia (por ejemplo, en La Quiaca, olas de calor: 25 en 65 años, Mann–Kendall sobre los conteos anuales con \(p < 0{,}001\)), la tasa promedio subestima la actual y \(T\) queda sobreestimado. Los tests de estacionariedad evalúan los valores de los eventos, no su frecuencia anual. Hay un tratamiento alternativo documentado, aplicado solo en la presentación y no incluido en el pipeline: <a href="https://github.com/CRC-SAS/copulas/blob/master/docs/pendiente_tasa_eventos_tendencia.md"><code>docs/pendiente_tasa_eventos_tendencia.md</code></a>.</li>
+  <li><strong>Muestra chica y cola.</strong> Con pocos eventos la selección de la familia es poco discriminante, y las colas se estiman de manera muy incierta. Los ajustes con menos de 30 eventos deben leerse con cautela.</li>
+  <li><strong>Eventos independientes entre sí.</strong> El período de retorno trata a los eventos como un proceso de ocurrencias independientes. La prueba de independencia serial detecta dependencia entre eventos consecutivos, pero no la modela.</li>
+  <li><strong>Bondad de ajuste con parámetros estimados.</strong> Los p-valores de KS, AD y CvM de la sección 3 se calculan como si los parámetros fueran conocidos, pero se estiman con los mismos datos. Eso hace que los tests rechacen menos de lo nominal.</li>
+</ul>
+<figure>
+  <img src="assets/img/quiaca_frecuencia.png" alt="Olas de calor por año en La Quiaca con tendencia creciente">
+  <figcaption>Figura 13. La Quiaca: conteo anual de olas de calor y tasa supuesta.</figcaption>
+</figure>
+
+<h3>Observaciones de implementación</h3>
+<table>
+<tr><th>#</th><th>Dónde</th><th>Observación</th></tr>
+<tr><td>1</td><td><code>funciones_bondad_ajuste_copulas.R</code>, <code>TestBIC</code></td>
+  <td>La penalización del BIC usa <code>log(ncol(matriz.eventos))</code>, es decir \(\ln 2\) (cantidad de columnas), en lugar de \(\ln n\) (cantidad de eventos). El valor reportado no es el BIC estándar. No altera la elección de familia mientras decida el AIC, porque el BIC solo desempata.</td></tr>
+<tr><td>2</td><td><code>funciones_auxiliares.R</code>, <code>AgregarRuido</code></td>
+  <td>El ruido es <code>v * runif(n, 0, v)</code>, de rango \([0, v^2]\), no \([0, v]\). Para la duración (\(v = 1\)) es \([0,1]\), y para las otras variables (\(v = 0{,}1\)) es \([0, 0{,}01]\), diez veces menor que el valor mínimo de detección. Para romper empates en la duración alcanza. Conviene confirmar si se pretendía \(U(0, v)\) también para las demás.</td></tr>
+<tr><td>3</td><td><code>funciones_mejor_ajuste_copula.R</code>, <code>DeterminarMejorCopula</code></td>
+  <td>Las comparaciones de desempate usan <code>mejor.copula$ccc</code> (inexistente en esa lista) donde corresponde BIC. Como los desempates se evalúan solo cuando el AIC es exactamente igual, no tiene efecto práctico. Además esa función no es la que usa el pipeline: el paso 11 aplica <code>MejorAjusteMultivariadoUC</code> (<code>funciones_worker.R</code>).</td></tr>
+<tr><td>4</td><td>Aleatoriedad</td>
+  <td>Fuera de las semillas fijadas explícitamente (series perturbadas, test de cópula empírica y simulación vía magnitud), los procesos paralelos no fijan semilla. Con <code>pobs(ties.method = "random")</code>, <code>gofCopula</code> (bootstrap) y <code>xvCopula</code>, dos corridas sobre los mismos datos pueden diferir levemente en las medidas de bondad de ajuste, y en casos de AIC muy cercanos, en la familia elegida.</td></tr>
+<tr><td>5</td><td><code>funciones_ajuste_familias_copulas.R</code></td>
+  <td>La familia t fija \(\nu = 4\). En el objeto final se reconstruye con el valor por defecto del paquete (que también es 4), de modo que coincide, pero la coincidencia es implícita.</td></tr>
+<tr><td>6</td><td>Paso 4 de <code>01_copulas.R</code></td>
+  <td>El jitter de la serie usada para el ajuste univariado usa números aleatorios cuya semilla es la misma que la de las series perturbadas (se fija antes). Cambiar <code>n.series.perturbadas</code> cambia el estado del generador y, por lo tanto, el jitter que se aplica a la serie univariada.</td></tr>
+</table>
+<div class="ojo"><p>Ninguna de estas observaciones se corrigió: el pipeline se mantiene tal como estaba en las corridas ya publicadas. Si se corrige alguna, hay que volver a correr y documentar la diferencia de resultados.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="repro">11. Reproducibilidad</h2>
+<ul>
+  <li>Las series perturbadas se generan con <code>s.series.perturbadas</code>, y la semilla se guarda en <code>partial/semilla_utilizada_&lt;id&gt;.rds</code>.</li>
+  <li>El test de cópula empírica usa la semilla 20261022 y restaura el estado del generador al terminar.</li>
+  <li>El período de retorno vía duración–magnitud usa la semilla 20261023, con restauración del estado.</li>
+  <li>Se guardan los eventos completos (observados y perturbados) en <code>partial/eventos_completos_&lt;id&gt;.rds</code>, y los intermedios en <code>data/partial/</code>.</li>
+  <li><code>reusar.resultados: true</code> recarga los ajustes de una corrida anterior y los reevalúa con los filtros vigentes, para no repetir el trabajo cuando solo cambian los filtros. Es válido únicamente si los filtros nuevos son al menos tan estrictos como los de la corrida anterior.</li>
+  <li>Hay pruebas automáticas (<code>tests/testthat</code>) de los criterios de estacionariedad, dependencia, filtros de ajuste, corrección de continuidad y período de retorno vía magnitud.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="parametros">12. Parámetros que afectan los resultados</h2>
+<p>Todos están en <code>parametros_copulas.yml</code> (la guía de uso explica cuáles tocar en una corrida común).</p>
+<table>
+<tr><th>Parámetro</th><th>Por defecto</th><th>Efecto sobre el método</th></tr>
+<tr><td><code>umbral.p.valor</code></td><td>0,05</td><td>Nivel \(\alpha\) de todos los tests (los de estacionariedad lo dividen por 5 con Bonferroni)</td></tr>
+<tr><td><code>correccion.estacionariedad</code></td><td><code>bonferroni</code></td><td>Umbral por test: \(\alpha/5\) o \(\alpha\)</td></tr>
+<tr><td><code>exigir.estacionariedad</code></td><td><code>true</code></td><td>Exige series estacionarias para ajustar cópulas</td></tr>
+<tr><td><code>exigir.serie.observada</code></td><td><code>true</code></td><td>La serie observada debe pasar los filtros</td></tr>
+<tr><td><code>n.series.perturbadas</code></td><td>2</td><td>Cantidad de series con ruido</td></tr>
+<tr><td><code>s.series.perturbadas</code></td><td>123</td><td>Semilla de las series perturbadas</td></tr>
+<tr><td><code>valores_minimos</code></td><td>1 (duración), 0,1 (resto)</td><td>Escala del ruido de las series perturbadas</td></tr>
+<tr><td><code>min_cantidad_valores_ajuste_univariado</code></td><td>30</td><td>Mínimo de eventos para ajustar una marginal (20 en la aplicación de temperaturas)</td></tr>
+<tr><td><code>variables_sin_test_continuidad</code></td><td>vacío</td><td>Variables discretas que se saltean KS/AD/CvM y Sn (<code>["duracion"]</code> en la aplicación de temperaturas)</td></tr>
+<tr><td><code>tests.estacionariedad</code>, <code>tests.dependencia</code></td><td>5 y 3 tests</td><td>Qué tests se aplican (y en qué orden)</td></tr>
+<tr><td><code>configuracion.ajuste.univariado</code>, <code>configuracion.ajuste.copula</code></td><td>13 y 6</td><td>Distribuciones y familias candidatas (<code>uso_sequias</code>)</td></tr>
+<tr><td><code>periodo_retorno.niveles_anios</code></td><td>2 … 500</td><td>Isolíneas dibujadas</td></tr>
+<tr><td><code>periodo_retorno.resolucion_grilla</code>, <code>margen_grilla</code></td><td>100, 0,4</td><td>Grilla de evaluación del período de retorno</td></tr>
+<tr><td><code>periodo_retorno.correccion_continuidad_duracion</code></td><td><code>true</code></td><td>Evalúa «al menos \(k\)» en \(k - 0{,}5\)</td></tr>
+<tr><td><code>periodo_retorno.colorear_enso</code></td><td><code>true</code></td><td>Colorea los eventos por fase ENSO</td></tr>
+<tr><td><code>reusar.resultados</code></td><td><code>false</code></td><td>Reutiliza ajustes de una corrida anterior</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="refs">13. Referencias</h2>
+<ul>
+  <li>Sklar, A. (1959). Fonctions de répartition à <em>n</em> dimensions et leurs marges. <em>Publ. Inst. Statist. Univ. Paris</em>, 8, 229–231.</li>
+  <li>Genest, C., Rémillard, B. y Beaudoin, D. (2009). Goodness-of-fit tests for copulas: A review and a power study. <em>Insurance: Mathematics and Economics</em>, 44(2), 199–213.</li>
+  <li>Genest, C. y Rémillard, B. (2004). Test of independence and randomness based on the empirical copula process. <em>Test</em>, 13(2), 335–369.</li>
+  <li>Genest, C. y Favre, A.-C. (2007). Everything you always wanted to know about copula modeling but were afraid to ask. <em>Journal of Hydrologic Engineering</em>, 12(4), 347–368.</li>
+  <li>Hosking, J. R. M. (1990). L-moments: analysis and estimation of distributions using linear combinations of order statistics. <em>J. R. Statist. Soc. B</em>, 52(1), 105–124.</li>
+  <li>Hofert, M., Kojadinovic, I., Mächler, M. y Yan, J. (2018). <em>Elements of Copula Modeling with R</em>. Springer.</li>
+  <li>Bücher, A. y Kojadinovic, I. (2016). Dependent multiplier bootstraps for non-degenerate U-statistics under mixing conditions with applications. <em>J. Stat. Plan. Inference</em>, 170, 83–105 (base del paquete <code>npcp</code>).</li>
+  <li>Wilcox, R. R., Erceg-Hurn, D. M., Clark, F. y Carlson, M. (2014). Comparing two independent groups via the lower and upper quantiles. <em>Journal of Statistical Computation and Simulation</em>, 84(7), 1543–1551.</li>
+  <li>Lin, L. I.-K. (1989). A concordance correlation coefficient to evaluate reproducibility. <em>Biometrics</em>, 45(1), 255–268.</li>
+  <li>Mann, H. B. (1945). Nonparametric tests against trend. <em>Econometrica</em>, 13(3), 245–259. Kendall, M. G. (1975). <em>Rank Correlation Methods</em>. Griffin.</li>
+  <li>Ljung, G. M. y Box, G. E. P. (1978). On a measure of lack of fit in time series models. <em>Biometrika</em>, 65(2), 297–303.</li>
+  <li>Kojadinovic, I. (2017). npcp: An R package for nonparametric tests for change-point detection in possibly multivariate observations. <em>Journal of Statistical Software</em>, 77(3), 1–31.</li>
+  <li>Chen et al. (2024), artículo citado en el código del pipeline como referencia de las Figuras 5 (ajuste de la marginal) y 7 (período de retorno combinado). La referencia completa está pendiente de incorporar.</li>
+</ul>
+
+<p class="pie">Repositorio: <a href="https://github.com/CRC-SAS/copulas">CRC-SAS/copulas</a>. Las cifras de la sección 9 provienen de la corrida <code>Olas_20</code>.</p>
+</main>
+</div>
+</body>
+</html>
