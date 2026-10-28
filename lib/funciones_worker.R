@@ -206,7 +206,7 @@ MejorAjusteMultivariadoUC <- function(input.value, script, copulas.ajustadas, um
 
 
 AjustarCopulas <- function(input.value, script, eventos.completos, umbral.p.valor, variables.discretas = NULL,
-                           exigir.estacionariedad = TRUE, exigir.serie.observada = TRUE) {
+                           exigir.estacionariedad = TRUE, exigir.serie.observada = TRUE, semilla = NULL) {
   # Obtener la ubicación y las variables de la copula, para cada serie perturbada 
   # (la distribución es única -la que mejor ajustó- para cada par ubicación, variable)
   vcu <- input.value
@@ -255,6 +255,11 @@ AjustarCopulas <- function(input.value, script, eventos.completos, umbral.p.valo
   
   # Crear parametros para el ajuste de las copulas
   parametros <- list(x = x.prima, y = y.prima)
+
+  # Semilla propia de la tarea: el desempate de rangos (pobs), el bootstrap de Sn, TestError y la validacion cruzada
+  # usan numeros aleatorios
+  FijarSemillaTarea(semilla, "copula", dplyr::pull(vcu, !!id_column), vcu$variable_x, vcu$variable_y,
+                    vcu$tipo_serie, vcu$n_serie, vcu$familia)
   
   # ------------------------------------------------------------------------------
   
@@ -362,7 +367,7 @@ DeterminarDependencia <- function(input.value, script, eventos.completos,
 
 
 DeterminarEstacionariedad <- function(input.value, script, eventos.completos,
-                                      tests.estacionariedad, umbral.p.valor) {
+                                      tests.estacionariedad, umbral.p.valor, semilla = NULL) {
   # Identificar la columna con el id de la ubicación (usualmente station_id, o point_id)
   id_column <- IdentificarIdColumn(input.value)
   
@@ -391,6 +396,9 @@ DeterminarEstacionariedad <- function(input.value, script, eventos.completos,
   # Paso 1: Calcular estacionariedad ----
   # -----------------------------------------------------------------------------#
   
+  # Semilla propia de la tarea: los tests de punto de cambio y de independencia serial se simulan
+  FijarSemillaTarea(semilla, "estacionariedad", dplyr::pull(input.value, !!id_column), input.value$variable,
+                    input.value$tipo_serie, input.value$n_serie, input.value$realizacion)
   t0 <- proc.time()
   resultados.estacionariedad.x <- EsEstacionaria(x.prima, fechas, tests.estacionariedad, umbral.p.valor)
   t1 <- proc.time() - t0
@@ -519,7 +527,7 @@ MejorAjusteUnivariadoUV <- function(input.value, script, ajustes.univariados) {
 
 
 AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.valor, variables.discretas = NULL,
-                                min.cantidad.valores = 30) {
+                                min.cantidad.valores = 30, semilla = NULL) {
   # Ubicación, variable y distribución 
   uvd <- input.value
   
@@ -551,6 +559,9 @@ AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.v
   
   configuracion <- uvd %>% 
     dplyr::select(distribucion, funcion_ajuste_lmomentos, funcion_ajuste_maxima_verosimilitud)
+
+  # Semilla propia de la tarea: el test de cuantiles (QCOMHD) simula una muestra y usa bootstrap
+  FijarSemillaTarea(semilla, "univariado", dplyr::pull(uvd, !!id_column), uvd$variable, uvd$distribucion)
   
   parametros.lmomentos            <- list(x = x, min.cantidad.valores = min.cantidad.valores)
   parametros.maxima.verosimilitud <- list(x = x, min.cantidad.valores = min.cantidad.valores, numero.muestras = NULL)

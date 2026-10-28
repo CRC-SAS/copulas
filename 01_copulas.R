@@ -277,6 +277,8 @@ series_perturbadas <- purrr::map_dfr(
 # Debido a problemas al ajustar la duración y el mínmo (columnas en el tibble eventos), es
 # necesario agregar algo de ruido a estas variables con jitter antes del ajuste univariado.  
 # OBS: Este ruido no puede agregarse antes de la generación de las series perturbadas!!
+# La semilla se fija de nuevo para que el jitter no dependa de la cantidad de series perturbadas generadas antes.
+set.seed(config$params$s.series.perturbadas + 1)
 serie_observada_ajuste_univariado <- serie_observada %>%
   dplyr::mutate(valor = dplyr::case_when(
     variable == 'duracion' ~ jitter(valor, 2),
@@ -361,7 +363,8 @@ if (reusar.resultados && file.exists(results_filename)) {
                                                 serie.observada = serie_observada_ajuste_univariado,
                                                 umbral.p.valor = config$params$umbral.p.valor,
                                                 variables.discretas = config$params$variables_sin_test_continuidad,
-                                                min.cantidad.valores = min_cantidad_valores)
+                                                min.cantidad.valores = min_cantidad_valores,
+                                                semilla = config$params$s.series.perturbadas)
 
   # Transformar resultados a un objeto de tipo tibble
   ajuste.univariado.x.ubic.var.dist <- ajuste.univariado.x.ubic.var.dist %>% purrr::map_dfr(~.x)
@@ -617,7 +620,8 @@ if (reusar.resultados && file.exists(results_filename)) {
                               input.values = series_a_computar, 
                               eventos.completos = eventos_completos,
                               tests.estacionariedad = config$params$tests.estacionariedad,
-                              umbral.p.valor = umbral.estacionariedad)
+                              umbral.p.valor = umbral.estacionariedad,
+                              semilla = config$params$s.series.perturbadas)
 
   # Transformar resultados a un objeto de tipo tibble
   estacionariedad <- estacionariedad %>% purrr::map_dfr(~.x)
@@ -791,7 +795,8 @@ if (reusar.resultados && file.exists(results_filename)) {
                        umbral.p.valor = config$params$umbral.p.valor,
                        variables.discretas = config$params$variables_sin_test_continuidad,
                        exigir.estacionariedad = exigir.estacionariedad.param,
-                       exigir.serie.observada = exigir.observada.param)
+                       exigir.serie.observada = exigir.observada.param,
+                       semilla = config$params$s.series.perturbadas)
     nuevos <- nuevos %>% purrr::map_dfr(~.x)
     file.append(script_logfile, task_logfile)
     if (length(task$getErrors()) > 0)
@@ -818,7 +823,8 @@ if (reusar.resultados && file.exists(results_filename)) {
                                 umbral.p.valor = config$params$umbral.p.valor,
                                 variables.discretas = config$params$variables_sin_test_continuidad,
                                 exigir.estacionariedad = ifelse(is.null(config$params$exigir.estacionariedad), TRUE, isTRUE(config$params$exigir.estacionariedad)),
-                              exigir.serie.observada = ifelse(is.null(config$params$exigir.serie.observada), TRUE, isTRUE(config$params$exigir.serie.observada)))
+                              exigir.serie.observada = ifelse(is.null(config$params$exigir.serie.observada), TRUE, isTRUE(config$params$exigir.serie.observada)),
+                              semilla = config$params$s.series.perturbadas)
 
   # Transformar resultados a un objeto de tipo tibble
   copulas.ajustadas <- copulas.ajustadas %>% purrr::map_dfr(~.x)

@@ -109,8 +109,8 @@ TestBIC <- function(copula = NA, x, y) {
   # La matriz debe tener al menos dos variables
   base::stopifnot(ncol(matriz.eventos) >= 2)
   
-  # Calcular el crterio de Akaike
-  BIC <- -2 * copula$bondad.ajuste$loglike + log(ncol(matriz.eventos)) * length(copula$parametro)
+  # Criterio de informacion bayesiano: -2 log L + k ln(n), con n = cantidad de eventos (filas)
+  BIC <- -2 * copula$bondad.ajuste$loglike + log(nrow(matriz.eventos)) * length(copula$parametro)
   
   # Devolver objeto resultado
   resultado$BIC <- BIC

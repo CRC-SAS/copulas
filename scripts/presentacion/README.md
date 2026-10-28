@@ -25,7 +25,8 @@ Todos se corren desde la raíz del repo (`Rscript scripts/presentacion/<script>.
 | `figuras_regiones_n.R` | `resumen_ajustes.R` | Cola por grupo, mapa de estaciones, cola según n de eventos |
 | `figuras_caso_87585.R` | corrida | Caso Buenos Aires 87585 (períodos cálidos y fríos de TX): isolíneas rotuladas, período de retorno, `caso_87585.txt` con las cifras citadas |
 | `figuras_limites.R` | `figuras_caso_87585.R`, `resumen_ajustes_filtrados.R` | AIC con n chico y período de retorno con cópula contra independencia |
-| `figuras_filtros.R` | `resumen_ajustes_filtrados.R`, `dependencia_tests.R`, `est_todos_tests.rds` (*) | Bonferroni, embudo de pares y tests de dependencia |
+| `estacionariedad_todos_tests.R` | `data/partial/eventos_completos_<tipo>.rds` | `est_todos_tests.rds`: p-valores de los 5 tests de estacionariedad en todas las series. Tarda mucho (unas 5 horas con 4 núcleos para las 73 estaciones: `NCORES`; para probar, `ESTACIONES=87585,87007`) |
+| `figuras_filtros.R` | `resumen_ajustes_filtrados.R`, `dependencia_tests.R`, `estacionariedad_todos_tests.R` | Bonferroni, embudo de pares y tests de dependencia |
 | `figura_quiaca.R` | `resumen_ajustes_filtrados.R` | Tendencia en la frecuencia de eventos (La Quiaca) y `tendencia_frecuencia.csv` |
 | `periodo_retorno_via_magnitud.R` | corrida | Período de retorno (duración, intensidad) vía la cópula duración-magnitud y su validación (`via_magnitud_validacion.csv`) |
 | `via_magnitud_resumen.R` | `periodo_retorno_via_magnitud.R` | Resumen de la validación |
@@ -37,7 +38,7 @@ Todos se corren desde la raíz del repo (`Rscript scripts/presentacion/<script>.
 
 I-D: intensidad-duración; D-M: duración-magnitud.
 
-(*) `est_todos_tests.rds` (p-valores de los 5 tests de estacionariedad sobre las series observadas) se calculó fuera del pipeline, porque el pipeline corta al primer test que rechaza; no hay un script versionado que lo genere.
+`est_todos_tests.rds` hace falta porque el pipeline aplica los tests de estacionariedad en secuencia y corta al primero que rechaza, así que `estacionariedad_<tipo>.rds` no tiene los cinco p-valores. El script usa las mismas funciones y la misma semilla por tarea (`FijarSemillaTarea`) que el pipeline: Box-Ljung y Mann-Kendall coinciden exactamente, y los tests simulados coinciden con los del pipeline cuando se corre con el mismo `SEMILLA` y los mismos datos. Las figuras del deck se hicieron con una versión anterior de este archivo (sin semilla por tarea), por lo que los p-valores simulados difieren levemente.
 
 ## Salidas
 

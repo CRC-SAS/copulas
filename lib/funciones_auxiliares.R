@@ -5,7 +5,7 @@ AgregarRuido <- function(x, valor.minimo.deteccion) {
   minimo <- min(0, valor.minimo.deteccion)
   maximo <- max(0, valor.minimo.deteccion)
   
-  repeticiones.ruido <- x + valor.minimo.deteccion * runif(length(x), min  = minimo, max = maximo)
+  repeticiones.ruido <- x + runif(length(x), min = minimo, max = maximo)
   
   # Devolver objeto resultado
   return(repeticiones.ruido)
@@ -55,3 +55,17 @@ GraficarKPlot <- function(x, y) {
 }
 #-------------------------------------------------------------------------------
 
+
+# Definicion de funcion para fijar una semilla determinista en una tarea paralela ----
+# La semilla se deriva de la semilla de la corrida y de la clave de la tarea (ubicacion, variable, serie, familia...),
+# de modo que el resultado no dependa del proceso que la ejecuta ni del orden en que se reparten las tareas.
+# Con semilla.base = NULL no se fija nada (comportamiento anterior).
+FijarSemillaTarea <- function(semilla.base, ...) {
+  if (is.null(semilla.base)) return (invisible(NULL))
+  clave <- paste(unlist(list(...)), collapse = "|")
+  h <- 0
+  for (v in utf8ToInt(clave)) h <- (h * 31 + v) %% 2147483647
+  set.seed(as.integer((semilla.base + h) %% 2147483647))
+  return (invisible(NULL))
+}
+#-------------------------------------------------------------------------------
