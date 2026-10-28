@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cópulas para eventos extremos · CRC-SAS</title>
+<meta name="description" content="Pipeline de cópulas para estimar el período de retorno combinado de eventos extremos (olas de calor, olas de frío, períodos cálidos y fríos, sequías).">
+<link rel="stylesheet" href="assets/estilo.css">
+</head>
+<body>
+<header class="barra"><nav>
+  <strong>Cópulas · CRC-SAS</strong>
+  <a class="activo" href="index.html">Inicio</a>
+  <a href="manual_tecnico.html">Manual técnico</a>
+  <a href="guia_de_uso.html">Guía de uso</a>
+  <a href="https://github.com/CRC-SAS/copulas">Repositorio</a>
+</nav></header>
+
+<div class="pagina">
+<main class="solo">
+<h1>Cópulas para el análisis de eventos extremos</h1>
+<p class="lead">Un pipeline en R que estima <strong>cada cuántos años se espera un evento extremo</strong> teniendo en cuenta varias características a la vez, por ejemplo su duración y su intensidad. Se desarrolló en el marco de CRC-SAS y se aplicó a olas de calor, olas de frío y períodos cálidos y fríos de temperatura en Argentina.</p>
+
+<div class="tarjetas">
+  <div class="tarjeta">
+    <h3>Guía de uso</h3>
+    <p>Para quien necesita <strong>configurar y correr</strong> una cópula sobre una o varias estaciones, sin necesidad de entender el método por dentro.</p>
+    <a class="boton" href="guia_de_uso.html">Abrir la guía</a>
+  </div>
+  <div class="tarjeta">
+    <h3>Manual técnico</h3>
+    <p>Para quien necesita <strong>entender, validar o continuar</strong> el desarrollo: datos, distribuciones, tests, cópulas, bondad de ajuste y período de retorno, con las fórmulas y los criterios de decisión.</p>
+    <a class="boton" href="manual_tecnico.html">Abrir el manual</a>
+  </div>
+</div>
+
+<h2>La idea en una figura</h2>
+<p>Una ola de calor larga <em>y</em> a la vez intensa es mucho más rara que cada cosa por separado, y cuánto más rara depende de cuánto se relacionan duración e intensidad. Una cópula describe esa relación. El gráfico muestra, para una estación, las combinaciones de duración e intensidad que se esperan cada 2, 5, 10, … años.</p>
+<figure>
+  <img src="assets/img/caso_isolineas_calor.png" alt="Isolíneas de período de retorno combinado en Buenos Aires">
+  <figcaption>Períodos cálidos de la temperatura máxima en Buenos Aires (87585): período de retorno combinado de la duración y la intensidad.</figcaption>
+</figure>
+
+<h2>Cómo funciona, a vista de pájaro</h2>
+<figure>
+  <img src="assets/img/flujo_pipeline.svg" alt="Flujo del pipeline en seis etapas">
+  <figcaption>De los eventos identificados al período de retorno: distribuciones marginales, filtros de calidad, cópula y período de retorno.</figcaption>
+</figure>
+
+<h2>Para empezar</h2>
+<ol>
+  <li>Si querés <strong>correr</strong> el pipeline: <a href="guia_de_uso.html">guía de uso</a>.</li>
+  <li>Si querés <strong>entender</strong> cada decisión metodológica: <a href="manual_tecnico.html">manual técnico</a>.</li>
+  <li>El código y el historial de cambios están en el <a href="https://github.com/CRC-SAS/copulas">repositorio</a>. Hay también una <a href="https://github.com/CRC-SAS/copulas/blob/master/docs/arquitectura.md">referencia breve de arquitectura</a> y una <a href="https://github.com/CRC-SAS/copulas/blob/master/docs/guia_video.md">guía del contexto conceptual</a> (SPI/SPEI, pentadas, generador estocástico).</li>
+</ol>
+
+<p class="pie">CRC-SAS · Centro Regional del Clima para el Sur de América del Sur. La identificación de los eventos y el generador estocástico de series sintéticas son procesos previos, externos a este repositorio.</p>
+</main>
+</div>
+</body>
+</html>
