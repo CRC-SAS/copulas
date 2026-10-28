@@ -5,7 +5,7 @@ AgregarRuido <- function(x, valor.minimo.deteccion) {
   minimo <- min(0, valor.minimo.deteccion)
   maximo <- max(0, valor.minimo.deteccion)
   
-  repeticiones.ruido <- x + valor.minimo.deteccion * runif(length(x), min  = minimo, max = maximo)
+  repeticiones.ruido <- x + runif(length(x), min = minimo, max = maximo)
   
   # Devolver objeto resultado
   return(repeticiones.ruido)
