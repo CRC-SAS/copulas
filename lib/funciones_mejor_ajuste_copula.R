@@ -34,9 +34,9 @@ DeterminarMejorCopula <- function(ajustes.copula = NULL) {
       if (!is.na(mejor.copula$familia)) {
         es.mejor.copula <- (aic.ajuste < mejor.copula$aic) ||
           ((aic.ajuste == mejor.copula$aic) && (bic.ajuste < mejor.copula$bic)) ||
-          ((aic.ajuste == mejor.copula$aic) && (bic.ajuste == mejor.copula$ccc) && (mre.ajuste < mejor.copula$mre)) ||
-          ((aic.ajuste == mejor.copula$aic) && (bic.ajuste == mejor.copula$ccc) && (mre.ajuste == mejor.copula$mre) && (rmse.ajuste < mejor.copula$rmse)) ||
-          ((aic.ajuste == mejor.copula$aic) && (bic.ajuste == mejor.copula$ccc) && (mre.ajuste == mejor.copula$mre) && (rmse.ajuste == mejor.copula$rmse) && (xv.ajuste == mejor.copula$validacion.cruzada))
+          ((aic.ajuste == mejor.copula$aic) && (bic.ajuste == mejor.copula$bic) && (mre.ajuste < mejor.copula$mre)) ||
+          ((aic.ajuste == mejor.copula$aic) && (bic.ajuste == mejor.copula$bic) && (mre.ajuste == mejor.copula$mre) && (rmse.ajuste < mejor.copula$rmse)) ||
+          ((aic.ajuste == mejor.copula$aic) && (bic.ajuste == mejor.copula$bic) && (mre.ajuste == mejor.copula$mre) && (rmse.ajuste == mejor.copula$rmse) && (xv.ajuste == mejor.copula$validacion.cruzada))
         
       } else {
         es.mejor.copula <- TRUE
