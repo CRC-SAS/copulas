@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Guía de uso · Cópulas para eventos extremos</title>
+<link rel="stylesheet" href="assets/estilo.css">
+</head>
+<body>
+<header class="barra"><nav>
+  <strong>Cópulas · CRC-SAS</strong>
+  <a href="index.html">Inicio</a>
+  <a href="manual_tecnico.html">Manual técnico</a>
+  <a class="activo" href="guia_de_uso.html">Guía de uso</a>
+  <a href="https://github.com/CRC-SAS/copulas">Repositorio</a>
+</nav></header>
+
+<div class="pagina">
+<aside class="indice"><ol>
+  <li><a href="#que-hace">Qué hace y qué necesitás</a></li>
+  <li><a href="#instalar">1. Instalación</a></li>
+  <li><a href="#config">2. Configuración inicial</a></li>
+  <li><a href="#csv">3. El CSV de eventos</a></li>
+  <li><a href="#correr">4. Correr una corrida</a>
+    <ul><li><a href="#estaciones">4.1 Estaciones</a></li><li><a href="#variables">4.2 Variables</a></li><li><a href="#tipo">4.3 Tipo de evento</a></li><li><a href="#ejecutar">4.4 Ejecutar</a></li></ul></li>
+  <li><a href="#varios">5. Varios tipos de evento</a></li>
+  <li><a href="#rigor">6. Criterios de calidad</a></li>
+  <li><a href="#enso">7. ENSO</a></li>
+  <li><a href="#resultados">8. Leer los resultados</a></li>
+  <li><a href="#problemas">9. Problemas frecuentes</a></li>
+  <li><a href="#chequeo">10. Lista de chequeo</a></li>
+  <li><a href="#glosario">Glosario</a></li>
+</ol></aside>
+
+<main>
+<h1>Guía de uso</h1>
+<p class="lead">Cómo configurar y correr una cópula para una o varias estaciones, sin necesidad de entender el detalle del método. Alcanza con saber editar archivos de texto y copiar un comando. Si más adelante querés saber <em>qué</em> hace el pipeline por dentro, está el <a href="manual_tecnico.html">manual técnico</a>.</p>
+
+<h2 id="que-hace">Qué hace y qué necesitás</h2>
+<p>Dado un listado de eventos extremos (olas de calor, olas de frío, períodos cálidos o fríos, sequías) con su duración e intensidad, el pipeline estima <strong>cada cuántos años se espera un evento de determinada combinación de duración e intensidad</strong>, y lo grafica con isolíneas. Lo hace para cada estación y cada par de variables que le pidas.</p>
+<figure>
+  <img src="assets/img/caso_isolineas_calor.png" alt="Gráfico de isolíneas de período de retorno">
+  <figcaption>Lo que produce, por estación y par de variables: un gráfico de período de retorno. Cada línea une las combinaciones de duración e intensidad que se esperan cada 2, 5, 10, … años. Los puntos blancos son los eventos observados.</figcaption>
+</figure>
+
+<div class="tarjetas">
+  <div class="tarjeta"><h3>Necesitás</h3>
+    <ul>
+      <li><strong>R</strong> (versión 4.x) y <strong>Git</strong>.</li>
+      <li>El <strong>CSV de eventos</strong> ya identificados. El pipeline no los identifica.</li>
+      <li>El archivo <strong>ENSO</strong> <code>enso_roni.txt</code> (hoy es obligatorio aunque no uses ENSO).</li>
+    </ul></div>
+  <div class="tarjeta"><h3>No necesitás</h3>
+    <ul>
+      <li>Saber programar en R.</li>
+      <li>Entender el método estadístico.</li>
+      <li>Tocar el código: se maneja con archivos de configuración.</li>
+    </ul></div>
+</div>
+
+<div class="nota"><p>Los dos archivos de datos (el CSV y el archivo ENSO) <strong>no vienen en el repositorio</strong>: hay que copiarlos a <code>data/input/</code>.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="instalar">1. Instalación</h2>
+<ol class="pasos">
+  <li><p>Bajá el repositorio:</p>
+<pre><code>git clone https://github.com/CRC-SAS/copulas.git
+cd copulas</code></pre></li>
+  <li><p>En Linux, instalá la librería del sistema que necesita el paquete <code>copula</code>:</p>
+<pre><code>sudo apt-get install libgsl-dev</code></pre></li>
+  <li><p>Desde una consola de R (o RStudio), instalá los paquetes, una sola vez:</p>
+<pre><code>install.packages(c("dplyr", "purrr", "lubridate", "magrittr", "lmomco",
+  "stringr", "yaml", "goftest", "WRS2", "futile.logger", "doSNOW", "foreach",
+  "iterators", "snow", "yardstick", "hydroGOF", "copula", "ggplot2",
+  "ggnewscale", "R6", "RPostgres", "data.table", "glue", "tidyr", "tibble",
+  "rlang", "xts", "npcp", "Kendall", "caret", "fitdistrplus"))</code></pre></li>
+</ol>
+<div class="ojo"><p>Si al correr aparece «Paquete no encontrado: …», falta instalar ese paquete: instalalo con <code>install.packages("nombre")</code> y repetí.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="config">2. Configuración inicial (una sola vez)</h2>
+<p>El pipeline se maneja con tres archivos de configuración. Dos ya vienen listos y uno hay que crearlo.</p>
+<figure>
+  <img src="assets/img/configuracion_archivos.svg" alt="Archivos que intervienen en una corrida">
+  <figcaption>Qué archivos intervienen. En naranja, los que vas a editar en cada corrida.</figcaption>
+</figure>
+
+<h3>2.1 <code>configuracion_copulas.yml</code>: dónde está el proyecto (hay que crearlo)</h3>
+<p>Copiá la plantilla y editala:</p>
+<pre><code>cp configuracion_copulas.yml.tmpl configuracion_copulas.yml</code></pre>
+<p>Reemplazá cada <code>${base}/Copulas/</code> por la <strong>ruta absoluta</strong> de la carpeta donde clonaste el repo, y poné en <code>max.procesos</code> cuántos núcleos del procesador querés usar:</p>
+<pre><code>dir:
+  base: /home/usuario/copulas/
+  run:  /home/usuario/copulas/run/
+  lib:  /home/usuario/copulas/lib/R/
+  data: /home/usuario/copulas/data/
+max.procesos: 4</code></pre>
+<p>Este archivo es propio de cada computadora y no se sube al repositorio. Las rutas deben ser absolutas y terminar en <code>/</code>.</p>
+
+<h3>2.2 <code>data/configuracion_archivos_utilizados.yml</code>: qué archivos usa</h3>
+<p>Ya viene armado. Solo hay tres líneas que te interesan:</p>
+<pre><code>identificador_corrida: &amp;idc "id1"                                   # (a)
+eventos_identificados: "input/eventos_identificados_unconditional.csv"   # (b)
+eventos_enso: "input/enso_roni.txt"                                      # (c)</code></pre>
+<ul>
+  <li><strong>(a)</strong> es un nombre que se agrega a todos los resultados (<code>copulas_id1.rds</code>, etc.). <strong>Cambialo en cada corrida</strong> si no querés pisar los resultados anteriores.</li>
+  <li><strong>(b)</strong> es el nombre de tu CSV de eventos, dentro de <code>data/</code>.</li>
+  <li><strong>(c)</strong> es el archivo ENSO, dentro de <code>data/</code>.</li>
+</ul>
+
+<h3>2.3 <code>parametros_copulas.yml</code>: qué se analiza</h3>
+<p>Es el archivo que vas a editar en cada corrida (ver la <a href="#correr">sección 4</a>). Trae comentarios que explican cada parámetro.</p>
+
+<!-- ============================================================ -->
+<h2 id="csv">3. El CSV de eventos</h2>
+<p>Una fila por evento. Estas columnas son obligatorias:</p>
+<table>
+<tr><th>Columna</th><th>Qué es</th></tr>
+<tr><td><code>station_id</code> (o <code>point_id</code>, o cualquier <code>*_id</code>)</td><td>Identificador de la ubicación</td></tr>
+<tr><td><code>tipo_evento</code></td><td>Tipo de evento, por ejemplo <code>OlaCalorTXyTN</code> o <code>seco</code></td></tr>
+<tr><td><code>conf_id</code></td><td>Número entero; debe coincidir con <code>conf_id</code> de <code>configuraciones.eventos</code></td></tr>
+<tr><td><code>realizacion</code></td><td>Número de realización sintética (1 si son datos observados)</td></tr>
+<tr><td><code>numero_evento</code></td><td>Número correlativo del evento</td></tr>
+<tr><td><code>fecha_inicio</code>, <code>fecha_fin</code></td><td>Fechas en formato <code>AAAA-MM-DD</code></td></tr>
+<tr><td><code>referencia_comienzo</code>, <code>referencia_fin</code></td><td>Fechas en formato <code>AAAA-MM-DD</code></td></tr>
+<tr><td><code>duracion</code>, <code>intensidad</code>, <code>magnitud</code>, <code>minimo</code>, <code>maximo</code></td><td>Métricas del evento (se usan en valor absoluto)</td></tr>
+</table>
+<pre><code>station_id,tipo_evento,conf_id,realizacion,numero_evento,fecha_inicio,fecha_fin,referencia_comienzo,referencia_fin,duracion,intensidad,magnitud,minimo,maximo
+87548,seco,3,1,1,2001-01-05,2001-03-10,2001-01-01,2001-03-31,13,1.2,15.6,-2.1,-0.8</code></pre>
+<p>Opcional: una columna <code>categoria_episodio</code> (se usa solo con episodios ENSO, ver la <a href="#enso">sección 7</a>).</p>
+
+<!-- ============================================================ -->
+<h2 id="correr">4. Correr una corrida</h2>
+<p>Una corrida común se define con <strong>cuatro decisiones</strong>, todas en <code>parametros_copulas.yml</code>. Todo lo demás (umbrales, tests, familias de cópulas) puede quedar como viene.</p>
+<table>
+<tr><th>Quiero…</th><th>Edito</th><th>En</th></tr>
+<tr><td>Cambiar las estaciones</td><td><code>ubicaciones</code></td><td><a href="#estaciones">4.1</a></td></tr>
+<tr><td>Cambiar las variables a relacionar</td><td><code>variables_copulas</code></td><td><a href="#variables">4.2</a></td></tr>
+<tr><td>Analizar otro tipo de evento</td><td><code>eventos.tipo</code></td><td><a href="#tipo">4.3</a></td></tr>
+<tr><td>Descartar eventos cortos</td><td><code>eventos.duracion_minima</code></td><td><a href="#tipo">4.3</a></td></tr>
+<tr><td>No pisar los resultados de otra corrida</td><td><code>identificador_corrida</code> (otro archivo)</td><td><a href="#config">2.2</a></td></tr>
+</table>
+
+<h3 id="estaciones">4.1 Estaciones: una o muchas</h3>
+<p>En <code>ubicaciones</code>, una línea por estación. El <code>id</code> tiene que existir en el CSV <strong>para el tipo de evento elegido</strong>:</p>
+<pre><code>ubicaciones:
+  - { id: "87548", nombre: "Junín" }
+  - { id: "87624", nombre: "Anguil INTA" }</code></pre>
+<p>Procesar una o cien estaciones es la misma corrida: alcanza con listarlas. Si alguna no tiene eventos de ese tipo, el script se detiene al arrancar con el mensaje «No hay datos, en eventos, para todas las ubicaciones».</p>
+
+<h3 id="variables">4.2 Variables</h3>
+<p>En <code>variables_copulas</code>, un par por línea. Cada par genera su propia cópula. Las variables posibles son <code>duracion</code>, <code>intensidad</code>, <code>magnitud</code>, <code>minimo</code> y <code>maximo</code>:</p>
+<pre><code>variables_copulas:
+  - { variable_x: "duracion",   variable_y: "intensidad" }
+  - { variable_x: "magnitud",   variable_y: "intensidad" }</code></pre>
+<ul>
+  <li>Cada variable usada también tiene que figurar en <code>valores_minimos</code>. El archivo ya trae <code>duracion</code>, <code>intensidad</code>, <code>magnitud</code> y <code>minimo</code>; si usás otra, agregala.</li>
+  <li>Evitá variables con muy pocos valores distintos como uno de los lados del par (ver <a href="#problemas">problemas frecuentes</a>). Si la duración es entera y de poco rango, conviene usar <code>variables_sin_test_continuidad</code>, como se explica ahí.</li>
+</ul>
+
+<h3 id="tipo">4.3 Tipo de evento y duración mínima</h3>
+<p>En <code>eventos.tipo</code> va <strong>un</strong> tipo por corrida, y tiene que coincidir con la columna <code>tipo_evento</code> del CSV. <code>duracion_minima</code> descarta los eventos más cortos, en la misma unidad que la duración del CSV (días en olas y períodos, pentadas en sequías):</p>
+<pre><code>eventos:
+  tipo: "OlaCalorTXyTN"
+  duracion_minima: 3</code></pre>
+
+<h3 id="ejecutar">4.4 Ejecutar</h3>
+<p>Desde la carpeta del repositorio:</p>
+<pre><code>Rscript 01_copulas.R</code></pre>
+<p>Sin argumentos usa <code>configuracion_copulas.yml</code> y <code>parametros_copulas.yml</code> de la carpeta actual y <code>data/configuracion_archivos_utilizados.yml</code>. El avance se ve en <code>run/CalcCopulas.log</code>:</p>
+<pre><code>tail -f run/CalcCopulas.log</code></pre>
+<div class="nota"><p><strong>Cuánto tarda.</strong> Con una a cinco estaciones y pocos pares, minutos. Con unas 70 estaciones, entre una y cuatro horas, según la cantidad de procesos. Cada paso paralelo deja además su propio registro en <code>run/CalcCopulas-&lt;NombreDelPaso&gt;.log</code>.</p></div>
+<p>Si algo falla, el script se detiene con un mensaje en la consola y en el log. La sección de <a href="#problemas">problemas frecuentes</a> cubre los casos habituales.</p>
+
+<!-- ============================================================ -->
+<h2 id="varios">5. Varios tipos de evento</h2>
+<p>Cada tipo necesita su propia corrida y su propio <code>identificador_corrida</code>, para no pisar resultados. Para cada tipo:</p>
+<ol class="pasos">
+  <li><p>Copiá los dos archivos con otro nombre:</p>
+<pre><code>cp parametros_copulas.yml parametros_olafrio.yml
+cp data/configuracion_archivos_utilizados.yml data/archivos_olafrio.yml</code></pre></li>
+  <li><p>En <code>parametros_olafrio.yml</code> cambiá <code>eventos.tipo</code> (y <code>ubicaciones</code>, porque no todas las estaciones tienen todos los tipos).</p></li>
+  <li><p>En <code>data/archivos_olafrio.yml</code> cambiá <code>identificador_corrida</code> (por ejemplo, <code>"olafrio"</code>).</p></li>
+  <li><p>Corré pasando <strong>los tres</strong> archivos, en este orden:</p>
+<pre><code>Rscript 01_copulas.R configuracion_copulas.yml parametros_olafrio.yml data/archivos_olafrio.yml</code></pre></li>
+  <li><p>Los <code>.rds</code> ya llevan el identificador en el nombre, pero los <strong>gráficos (PNG) no</strong>: movelos a otra carpeta antes de la próxima corrida, o se pisan.</p>
+<pre><code>mkdir -p resultados/olafrio
+mv data/output/periodo_retorno_*.png resultados/olafrio/</code></pre></li>
+</ol>
+<div class="ojo"><p>Corré los tipos de a uno y revisá el log antes de lanzar el siguiente.</p></div>
+
+<details><summary>Automatizar varios tipos con un bucle</summary>
+<p>Si todos los tipos usan las mismas estaciones, se puede encadenar. Este ejemplo toma <code>parametros_copulas.yml</code> como base y cambia solo el tipo y el identificador. Probalo primero con un tipo.</p>
+<pre><code>for tipo in OlaCalorTXyTN OlaFrioTXyTN; do
+  idc=$(echo "$tipo" | tr 'A-Z' 'a-z')
+  sed "s/^  tipo: .*/  tipo: \"$tipo\"/" parametros_copulas.yml &gt; parametros_$idc.yml
+  sed "s/^identificador_corrida: &amp;idc .*/identificador_corrida: \&amp;idc \"$idc\"/" \
+      data/configuracion_archivos_utilizados.yml &gt; data/archivos_$idc.yml
+  Rscript 01_copulas.R configuracion_copulas.yml parametros_$idc.yml data/archivos_$idc.yml
+  mkdir -p resultados/$idc
+  mv data/output/periodo_retorno_*.png resultados/$idc/
+done</code></pre>
+</details>
+
+<!-- ============================================================ -->
+<h2 id="rigor">6. Criterios de calidad</h2>
+<p>Una cópula solo se ajusta si el par de variables pasa dos filtros: las variables son <strong>dependientes</strong> (si fueran independientes no hay nada que modelar) y las series son <strong>estacionarias</strong> (no cambian a lo largo del tiempo, que es lo que permite hablar de «un período de retorno»). Cuatro parámetros controlan el criterio. Los valores por defecto son los rigurosos:</p>
+<table>
+<tr><th>Parámetro</th><th>Por defecto</th><th>Qué hace</th></tr>
+<tr><td><code>correccion.estacionariedad</code></td><td><code>bonferroni</code></td><td>Una serie es estacionaria si pasa <strong>los cinco</strong> tests. Con <code>bonferroni</code> cada test usa un umbral más estricto (0,05/5 = 0,01), para que no se descarten por azar series que sí son estacionarias. Con <code>ninguna</code> se usa 0,05 en cada test.</td></tr>
+<tr><td><code>exigir.estacionariedad</code></td><td><code>true</code></td><td>Solo se ajusta si las dos series son estacionarias. Con <code>false</code> se ajusta igual y la estacionariedad queda como información.</td></tr>
+<tr><td><code>exigir.serie.observada</code></td><td><code>true</code></td><td>El par debe pasar los filtros con la serie <strong>observada</strong>, no solo con alguna de las series con ruido (las «perturbadas»). Con <code>false</code> alcanza con alguna perturbada.</td></tr>
+<tr><td><code>reusar.resultados</code></td><td><code>false</code></td><td>Con <code>true</code> se reutilizan los ajustes de una corrida anterior (carpeta <code>data/output</code>) en vez de recalcularlos. Solo es válido si los filtros nuevos son <strong>al menos tan estrictos</strong> que los de esa corrida.</td></tr>
+</table>
+<div class="ojo"><p><strong>Regla de oro.</strong> Si relajás un criterio (<code>false</code> en los tres primeros), documentá qué cambiaste y cuánto cambian los resultados respecto de la configuración por defecto. Es lo que permite comparar corridas.</p></div>
+
+<h3>Otras opciones que podés necesitar</h3>
+<table>
+<tr><th>Parámetro</th><th>Para qué</th></tr>
+<tr><td><code>min_cantidad_valores_ajuste_univariado</code></td><td>Mínimo de eventos para ajustar una variable (30 si no se define). Si tenés pocos eventos, bajalo, sabiendo que con pocos datos los resultados son menos confiables.</td></tr>
+<tr><td><code>variables_sin_test_continuidad</code></td><td>Lista de variables enteras con muchos valores repetidos (<code>["duracion"]</code>). Evita que tests pensados para variables continuas las rechacen siempre.</td></tr>
+<tr><td><code>periodo_retorno.niveles_anios</code></td><td>Los períodos de retorno de las isolíneas del gráfico (por defecto 2, 5, 10, 20, 50, 100, 200, 500).</td></tr>
+<tr><td><code>periodo_retorno.correccion_continuidad_duracion</code></td><td><code>true</code> por defecto. Hace que «duración de al menos 5 días» se evalúe a 4,5, porque la duración es entera. Con <code>false</code> el período de retorno de combinaciones con duración sale subestimado.</td></tr>
+<tr><td><code>periodo_retorno.graficar_distribucion_ajuste</code></td><td><code>false</code> por defecto. Con <code>true</code> genera un histograma por estación y variable (muchos PNG).</td></tr>
+<tr><td><code>n.series.perturbadas</code>, <code>s.series.perturbadas</code></td><td>Cantidad de series con ruido (2) y semilla (123). Dejalos como están para poder comparar con otras corridas.</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="enso">7. ENSO (opcional)</h2>
+<p>El pipeline relaciona los eventos con El Niño y La Niña a partir de <code>data/input/enso_roni.txt</code> (índice RONI por trimestre móvil, separado por tabuladores, con columnas <code>Year, Season, Start_Month, End_Month, RONI, Tipo_evento</code>). Hay tres niveles de uso, y solo el primero es automático.</p>
+<ol>
+  <li><strong>Clasificación de cada evento (automática).</strong> Cada evento recibe una fase (Niño, Niña o Neutro, con su intensidad) según el mes en que empezó. No requiere configuración, pero <strong>el archivo tiene que existir</strong> aunque no te interese ENSO: si falta, el script falla al leerlo.</li>
+  <li><strong>Gráficos con o sin colores ENSO.</strong> Por defecto los puntos observados se pintan según la fase. Para un gráfico sin colores, agregá a <code>parametros_copulas.yml</code>:
+<pre><code>periodo_retorno:
+  colorear_enso: false</code></pre></li>
+  <li><strong>Cópulas sobre los episodios ENSO en sí.</strong> Si lo que querés analizar son los propios episodios Niño/Niña (duración e intensidad de cada uno), armá un CSV en el que cada episodio es una fila con <code>station_id = ENSO</code>, <code>tipo_evento = Nina</code> (o <code>Nino</code>) y una columna <code>categoria_episodio</code> (por ejemplo, <code>Niña Moderada</code>). Después, en <code>parametros_copulas.yml</code>:
+<pre><code>ubicaciones:
+  - { id: "ENSO", nombre: "ENSO" }
+eventos:
+  tipo: "Nina"          # una corrida para Nina y otra para Nino
+  duracion_minima: 1
+variables_copulas:
+  - { variable_x: "duracion", variable_y: "intensidad" }
+min_cantidad_valores_ajuste_univariado: 20   # son pocos episodios (unos 25)</code></pre>
+  Y apuntá <code>eventos_identificados</code> al CSV de episodios en una copia de <code>configuracion_archivos_utilizados.yml</code> (como en la <a href="#varios">sección 5</a>).</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="resultados">8. Leer los resultados</h2>
+<p>Todo queda en <code>data/output/</code> (<code>&lt;id&gt;</code> es el <code>identificador_corrida</code>):</p>
+<table>
+<tr><th>Archivo</th><th>Qué contiene</th></tr>
+<tr><td><code>periodo_retorno_&lt;estación&gt;_&lt;x&gt;_&lt;y&gt;.png</code></td><td>Gráfico de período de retorno combinado: para cada combinación de valores, cada cuántos años se espera un evento así de extremo.</td></tr>
+<tr><td><code>periodo_retorno_univariado_&lt;estación&gt;_&lt;variable&gt;.png</code></td><td>Lo mismo para cada variable por separado.</td></tr>
+<tr><td><code>copulas_&lt;id&gt;.rds</code></td><td>Resultado final: la cópula y las distribuciones elegidas, por estación y par de variables.</td></tr>
+<tr><td><code>mejores_ajustes_multivariados_&lt;id&gt;.rds</code></td><td>La familia de cópula elegida por estación y par, con sus medidas de ajuste.</td></tr>
+<tr><td><code>mejores_ajustes_univariados_&lt;id&gt;.rds</code></td><td>La distribución elegida para cada variable.</td></tr>
+<tr><td><code>periodo_retorno_&lt;id&gt;.rds</code> y <code>periodo_retorno_univariado_&lt;id&gt;.rds</code></td><td>Las tablas detrás de los gráficos.</td></tr>
+</table>
+
+<h3>Cómo leer el gráfico</h3>
+<ul>
+  <li>Los dos ejes son las dos variables (por ejemplo, duración e intensidad).</li>
+  <li>Las <strong>líneas</strong> son combinaciones con el mismo período de retorno. La línea marcada «10» une las combinaciones que se esperan, en promedio, una vez cada 10 años.</li>
+  <li>El período de retorno mide eventos que superan <strong>las dos</strong> variables a la vez: un evento de 7 días <em>y</em> intensidad 3 o más.</li>
+  <li>Los puntos son los eventos observados. Es normal que pocos o ninguno caigan más allá de la línea de 50 años en un registro de 65 años: se espera alrededor de uno.</li>
+  <li>Si el nombre del archivo no aparece para una estación y par, es que ese par no pasó los filtros (ver <a href="#rigor">sección 6</a>). No es un error.</li>
+</ul>
+
+<h3>Abrir los resultados en R</h3>
+<p>Los <code>.rds</code> se abren desde R. Este ejemplo lista, para cada estación, la familia elegida y su parámetro (la tabla trae una fila por serie: la 0 es la observada, y la cópula final es la misma en todas):</p>
+<pre><code>library(dplyr)
+res &lt;- readRDS("data/output/copulas_id1.rds")
+
+res %&gt;%
+  filter(n_serie == 0, !is.na(parametro_mejor_copula)) %&gt;%
+  transmute(station_id,
+            par       = paste(variable_x, variable_y, sep = "-"),
+            familia   = sapply(mejor_copula, function(c) sub("Copula$", "", class(c))),
+            parametro = parametro_mejor_copula,
+            marginal_x = mejor_ajuste_x_dist,
+            marginal_y = mejor_ajuste_y_dist)</code></pre>
+<p>Las estaciones y pares que no pasaron los filtros no aparecen (por el <code>!is.na</code>). Para consultar el período de retorno de una combinación concreta sin leer el gráfico, la tabla <code>grilla</code> de <code>periodo_retorno_&lt;id&gt;.rds</code> tiene el valor en una malla de puntos. Este ejemplo toma el punto más cercano:</p>
+<pre><code>pr    &lt;- readRDS("data/output/periodo_retorno_id1.rds")
+fila  &lt;- pr %&gt;% filter(station_id == "87548", variable_x == "intensidad", variable_y == "duracion")
+g     &lt;- fila$grilla[[1]]                 # columnas x, y y T (años)
+
+consulta &lt;- c(x = 2, y = 5)               # intensidad &gt;= 2 y duración &gt;= 5 días
+i &lt;- which.min(((g$x - consulta["x"]) / diff(range(g$x)))^2 +
+               ((g$y - consulta["y"]) / diff(range(g$y)))^2)
+g[i, ]                                    # T en años</code></pre>
+<div class="nota"><p>El valor es aproximado: se toma el punto de la malla más cercano a la consulta. Alcanza para estimar el orden de magnitud. Para un cálculo exacto hace falta evaluar la distribución conjunta con el código del pipeline.</p></div>
+
+<!-- ============================================================ -->
+<h2 id="problemas">9. Problemas frecuentes</h2>
+<table>
+<tr><th>Qué ves</th><th>Qué pasa y qué hacer</th></tr>
+<tr><td>«El archivo … no existe» al arrancar</td><td>Falta alguno de los tres YAML, el CSV de eventos o <code>data/input/enso_roni.txt</code>, o una ruta en <code>configuracion_copulas.yml</code> está mal. Revisá que las rutas sean absolutas y terminen en la carpeta correcta.</td></tr>
+<tr><td>«Paquete no encontrado: …»</td><td>Falta instalar ese paquete (<a href="#instalar">sección 1</a>).</td></tr>
+<tr><td>«No hay datos, en eventos, para todas las ubicaciones» o «…para todas las variables»</td><td>Alguna estación de <code>ubicaciones</code> no tiene eventos del <code>eventos.tipo</code> elegido (con la <code>duracion_minima</code> y <code>n.realizaciones</code> dados), o alguna variable de <code>variables_copulas</code> no está en el CSV o en <code>valores_minimos</code>.</td></tr>
+<tr><td>Aborta a mitad de camino con <code>objeto 'parametro' no encontrado</code>, o aparece <code>non-finite finite-difference value</code></td><td>Es un test de bondad de ajuste (Sn) que falla con una variable de pocos valores distintos, como una duración entera con rango chico. Poné esa variable en <code>variables_sin_test_continuidad: ["duracion"]</code> (el test Sn se omite en los pares que la incluyen), o elegí otro par de variables.</td></tr>
+<tr><td>Una variable no se ajusta (resultado vacío)</td><td>Tiene menos eventos que <code>min_cantidad_valores_ajuste_univariado</code> (30 por defecto). Bajalo si corresponde, sabiendo que con pocos eventos el resultado es menos confiable.</td></tr>
+<tr><td>Una estación no tiene gráfico para un par de variables</td><td>No pasó los filtros de dependencia o estacionariedad, o ninguna familia de cópula ajustó bien. Es un resultado, no un error. En las olas de calor y de frío es frecuente: tienen pocos eventos por estación.</td></tr>
+<tr><td>Los gráficos de dos corridas se pisaron</td><td>Los PNG no llevan el identificador de la corrida. Movelos a otra carpeta antes de la corrida siguiente (<a href="#varios">sección 5</a>).</td></tr>
+<tr><td>Dos corridas iguales dan números levemente distintos</td><td>Algunos pasos usan números aleatorios que no se fijan (por ejemplo, el desempate de rangos y los tests de bondad de ajuste). Las diferencias pequeñas son normales. Si necesitás exactamente los mismos números más adelante, conservá los <code>.rds</code> de resultados de la corrida.</td></tr>
+<tr><td>Quiero ver qué está pasando</td><td><code>run/CalcCopulas.log</code> tiene el resumen, y cada paso paralelo deja su registro en <code>run/CalcCopulas-&lt;NombreDelPaso&gt;.log</code>. Para ver el error real de una tarea que falló, reproducí la llamada fuera del cluster, en una sesión de R común.</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="chequeo">10. Lista de chequeo antes de correr</h2>
+<ul>
+  <li>☐ <code>configuracion_copulas.yml</code> existe, con rutas absolutas.</li>
+  <li>☐ El CSV de eventos y <code>enso_roni.txt</code> están en <code>data/input/</code>, y los nombres coinciden con <code>configuracion_archivos_utilizados.yml</code>.</li>
+  <li>☐ <code>identificador_corrida</code> es distinto al de la corrida anterior (o querés pisarla).</li>
+  <li>☐ <code>ubicaciones</code> son estaciones que tienen eventos del <code>eventos.tipo</code>.</li>
+  <li>☐ <code>variables_copulas</code> usa variables que están en el CSV y en <code>valores_minimos</code>.</li>
+  <li>☐ Si la duración es entera, <code>variables_sin_test_continuidad: ["duracion"]</code>.</li>
+  <li>☐ Los criterios de calidad están en sus valores por defecto, o anotaste por qué no.</li>
+  <li>☐ Los PNG de la corrida anterior están guardados en otra carpeta.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="glosario">Glosario</h2>
+<dl>
+  <dt><strong>Evento</strong></dt><dd>Un episodio extremo identificado (una ola de calor, un período frío, una sequía) con su fecha, duración e intensidad.</dd>
+  <dt><strong>Período de retorno</strong></dt><dd>Cada cuántos años, en promedio, se espera un evento al menos así de extremo. Un evento de «50 años» no ocurre cada 50 años exactos: tiene un 2 % de probabilidad de ocurrir en cualquier año.</dd>
+  <dt><strong>Cópula</strong></dt><dd>La forma matemática de la relación entre dos variables (por ejemplo, que las olas más largas tiendan a ser también más intensas).</dd>
+  <dt><strong>Serie estacionaria</strong></dt><dd>Una serie cuyas propiedades no cambian a lo largo del tiempo (sin tendencia ni cambios bruscos).</dd>
+  <dt><strong>Variables dependientes</strong></dt><dd>Variables cuya relación no se puede atribuir al azar.</dd>
+  <dt><strong>Serie perturbada</strong></dt><dd>La serie observada con un ruido muy pequeño que rompe los empates (por ejemplo, varias olas de 3 días). Se usa para dar robustez al ajuste.</dd>
+  <dt><strong>Isolínea</strong></dt><dd>Línea que une puntos con el mismo valor (aquí, el mismo período de retorno).</dd>
+  <dt><strong>Corrida</strong></dt><dd>Una ejecución de <code>01_copulas.R</code> para un tipo de evento, con sus estaciones y variables.</dd>
+</dl>
+
+<p class="pie">¿Querés entender cómo funciona por dentro? Mirá el <a href="manual_tecnico.html">manual técnico</a>. Repositorio: <a href="https://github.com/CRC-SAS/copulas">CRC-SAS/copulas</a>.</p>
+</main>
+</div>
+</body>
+</html>
