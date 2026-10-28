@@ -197,6 +197,41 @@ pisar resultados). Para cada tipo:
 
 Corré los tipos de a uno y revisá el log antes de lanzar el siguiente.
 
+### 5.6 Filtros de calidad y reuso de resultados
+
+Una cópula solo se ajusta si el par de variables pasa dos filtros: las variables
+son **dependientes** (tests de independencia) y las series son **estacionarias**
+(tests de `tests.estacionariedad`). Cuatro parámetros controlan el criterio:
+
+| Parámetro | Valor por defecto | Qué hace |
+|---|---|---|
+| `correccion.estacionariedad` | `bonferroni` | Una serie es estacionaria si pasa **todos** los tests. Con `bonferroni` el umbral de cada test es `umbral.p.valor` / cantidad de tests (0,05/5 = 0,01), para que la probabilidad de rechazar por azar una serie estacionaria no suba de ~5% a ~23%. Con `ninguna` se usa `umbral.p.valor` en cada test. |
+| `exigir.estacionariedad` | `true` | Con `true` solo se ajusta si ambas series son estacionarias. Con `false` se ajusta igual y la estacionariedad queda como información (columna `es_estacionaria` en `estacionariedad_*.rds`). |
+| `exigir.serie.observada` | `true` | Con `true` el par debe pasar los filtros con la serie **observada**, no solo con alguna de las series perturbadas. Con `false` alcanza con alguna perturbada (criterio original). |
+| `reusar.resultados` | `false` | Con `true` se recargan los ajustes univariados, las series perturbadas, la estacionariedad y los ajustes de cópulas de una corrida anterior (carpeta `data/output`) en vez de recalcularlos. Los ajustes que no pasan los filtros vigentes se anulan y los que ahora los pasan sin ajuste previo se ajustan. Solo es válido si los filtros nuevos son al menos tan estrictos como los de la corrida anterior. |
+
+`false` en los tres primeros relaja el criterio: si lo usás, documentá cuánto
+cambian los resultados respecto de la configuración por defecto. Para reusar
+resultados con `pruebas/correr_un_tipo_evento.sh`, definí `REUSAR_RESULTADOS=TRUE`.
+
+El test de independencia con cópula empírica usa una semilla fija, así que
+repetir la corrida da los mismos resultados.
+
+### 5.7 Correccion de continuidad de la duracion
+
+La duración es entera (días) y las distribuciones y cópulas son continuas: para el modelo, un evento de
+`k` días ocupa el intervalo (k − 0,5, k + 0,5). Por eso "duración de al menos `k` días" se evalúa en `k − 0,5`.
+Sin esa corrección, la probabilidad conjunta de "más de `k` días" queda sobrestimada entre 25 y 30 %
+y el período de retorno subestimado. El parámetro, en `parametros_copulas.yml`:
+
+```yaml
+periodo_retorno:
+  correccion_continuidad_duracion: true   # false = evaluar en k, sin corrección
+```
+
+Aplica a las variables llamadas `duracion` en el período de retorno bivariado y univariado. Los gráficos
+siguen mostrando la duración en días enteros: el eje no cambia, el 0,5 es solo parte del cálculo.
+
 ## 6. ENSO (opcional)
 
 El pipeline relaciona los eventos con El Niño / La Niña a partir de

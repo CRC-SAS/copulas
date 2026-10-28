@@ -140,6 +140,7 @@ Resultados principales (`<id>` = `identificador_corrida`):
 | `eventos.duracion_minima` | Duración mínima (en pentadas) de los eventos incluidos |
 | `valores_minimos` | Valor mínimo de detección por variable, para generar el ruido de las series perturbadas. Debe cubrir cada variable usada en `variables_copulas` |
 | `umbral.p.valor` | Nivel de significancia de todos los tests |
+| `correccion.estacionariedad`, `exigir.estacionariedad`, `exigir.serie.observada`, `reusar.resultados` | Criterio de filtros (Bonferroni, series observadas) y reuso de resultados; ver `docs/guia_ejecucion.md` §5.6 |
 | `n.series.perturbadas` | Cantidad de series con ruido por variable |
 | `n.realizaciones` | Se usan las realizaciones sintéticas `<= n.realizaciones` |
 | `s.series.perturbadas` | Semilla (`set.seed`) para reproducir la corrida |

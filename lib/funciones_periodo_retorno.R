@@ -47,7 +47,11 @@ EtiquetaVariable <- function(variable) {
   Capitalizar(dplyr::recode(variable, duracion = "duración"))
 }
 
-CalcularGrillaPeriodoRetorno <- function(mvdc, N, n, grid_x, grid_y) {
+CalcularGrillaPeriodoRetorno <- function(mvdc, N, n, grid_x, grid_y, desplazar_x = 0, desplazar_y = 0) {
+  # desplazar_x / desplazar_y: correccion de continuidad para variables enteras (ej. duracion en dias). Un evento de k dias
+  # es, para el modelo continuo, una duracion en (k - 0.5, k + 0.5]: "duracion >= k" se evalua en k - 0.5 (desplazar = 0.5).
+  # Sin la correccion, P(D > k) incluye los eventos de k dias y la probabilidad queda sobrestimada (~25 a 30 %).
+  # grid_x / grid_y siguen siendo los valores a mostrar; el desplazamiento se aplica solo al evaluar el modelo.
   # La familia ganadora puede tener parametro NA (ver AplicarMejorAjusteACopulas
   # / fc17f05 / 373e1df). Para clayton/normal/t, pCopula/pMvdc abortan con
   # error ante un parametro NA (queda atrapado por el tryCatch del caller,
@@ -64,9 +68,9 @@ CalcularGrillaPeriodoRetorno <- function(mvdc, N, n, grid_x, grid_y) {
 
   grilla <- tidyr::crossing(x = grid_x, y = grid_y)
 
-  F_X  <- do.call(what = paste0("p", mvdc@margins[1]), args = c(list(q = grilla$x), mvdc@paramMargins[[1]]))
-  F_Y  <- do.call(what = paste0("p", mvdc@margins[2]), args = c(list(q = grilla$y), mvdc@paramMargins[[2]]))
-  F_XY <- copula::pMvdc(cbind(grilla$x, grilla$y), mvdc)
+  F_X  <- do.call(what = paste0("p", mvdc@margins[1]), args = c(list(q = grilla$x - desplazar_x), mvdc@paramMargins[[1]]))
+  F_Y  <- do.call(what = paste0("p", mvdc@margins[2]), args = c(list(q = grilla$y - desplazar_y), mvdc@paramMargins[[2]]))
+  F_XY <- copula::pMvdc(cbind(grilla$x - desplazar_x, grilla$y - desplazar_y), mvdc)
 
   # P(X>=x, Y>=y), acotada para evitar T infinito/negativo por errores de redondeo
   prob_conjunta <- pmax(1 - F_X - F_Y + F_XY, 1e-6)
@@ -196,8 +200,9 @@ GraficarPeriodoRetorno <- function(grilla, niveles_anios, x_obs, y_obs, enso_obs
 # Formula: T(x) = N / (n * (1 - F(x))), donde F es la distribucion ganadora
 # del mejor ajuste univariado (PASO 6) para esa estacion+variable.
 
-CalcularGrillaPeriodoRetornoUV <- function(distribucion, parametros, N, n, grid_x) {
-  F_X <- do.call(what = paste0("p", distribucion), args = c(list(q = grid_x), parametros))
+CalcularGrillaPeriodoRetornoUV <- function(distribucion, parametros, N, n, grid_x, desplazar_x = 0) {
+  # desplazar_x: correccion de continuidad para variables enteras (ver CalcularGrillaPeriodoRetorno)
+  F_X <- do.call(what = paste0("p", distribucion), args = c(list(q = grid_x - desplazar_x), parametros))
 
   # P(X>=x), acotada para evitar T infinito/negativo por errores de redondeo
   prob_excedencia <- pmax(1 - F_X, 1e-6)
@@ -278,4 +283,39 @@ GraficarDistribucionUnivariada <- function(x_obs, distribucion, parametros,
   }
 
   ggplot2::ggsave(filename = archivo_png, plot = p, width = 7.5, height = 5.5, dpi = 150)
+}
+
+
+# ------------------------------------------------------------------------------#
+# ---- Periodo de retorno combinado (duracion, intensidad) a partir de la copula
+# ---- duracion-magnitud. Como magnitud = duracion * intensidad (exacto),
+# ---- P(D > d, I > i) = P(D > d, M > i * D). Se simula del Mvdc ajustado
+# ---- (x = duracion, y = magnitud) y se cuenta la fraccion que cumple la condicion.
+# ---- Alternativa para las estaciones sin copula intensidad-duracion; ver
+# ---- scripts/presentacion/periodo_retorno_via_magnitud.R (validacion).
+# ------------------------------------------------------------------------------#
+
+# mvdc: Mvdc ajustado a (duracion, magnitud); d, i: vectores de igual largo (umbrales)
+# Devuelve P(D > d, I > i). Para duraciones enteras conviene d = k - 0.5 para "D >= k"
+# (correccion de continuidad; con d entero la probabilidad queda sobrestimada).
+ProbabilidadConjuntaViaMagnitud <- function(mvdc, d, i, nsim = 400000, semilla = 20261023) {
+  if (any(is.na(mvdc@copula@parameters))) stop("parameter is NA")
+  if (length(d) != length(i)) stop("d e i deben tener el mismo largo")
+  # Se fija la semilla (restaurando la del proceso al terminar) para que el resultado sea reproducible
+  semilla.previa <- if (exists(".Random.seed", envir = globalenv())) get(".Random.seed", envir = globalenv()) else NULL
+  on.exit(if (!is.null(semilla.previa)) assign(".Random.seed", semilla.previa, envir = globalenv()), add = TRUE)
+  set.seed(semilla)
+  u <- copula::rCopula(nsim, mvdc@copula)
+  qx <- get(paste0("q", mvdc@margins[1])); qy <- get(paste0("q", mvdc@margins[2]))
+  D <- do.call(qx, c(list(u[, 1]), mvdc@paramMargins[[1]]))
+  M <- do.call(qy, c(list(u[, 2]), mvdc@paramMargins[[2]]))
+  ok <- is.finite(D) & is.finite(M) & D > 0
+  I <- M[ok] / D[ok]; D <- D[ok]
+  mapply(function(dd, ii) mean(D > dd & I > ii), d, i)
+}
+
+# Periodo de retorno (anios) = N / (n * P), con N anios de registro y n eventos
+PeriodoRetornoViaMagnitud <- function(mvdc, d, i, N, n, nsim = 400000, semilla = 20261023) {
+  p <- ProbabilidadConjuntaViaMagnitud(mvdc, d, i, nsim, semilla)
+  return (N / (n * pmax(p, 1e-6)))
 }

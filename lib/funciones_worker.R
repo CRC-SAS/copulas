@@ -49,6 +49,8 @@ AplicarMejorAjusteACopulas <- function(input.value, script, copulas.ajustadas,
     .x = copulas_ajustadas_familia$n_serie,
     .y = copulas_ajustadas_familia$copula,
     .f = function(n_serie, copula) {
+      # Las series en las que no se ajusto la copula (no dependientes o no estacionarias) quedan en NA
+      if (!is.list(copula)) return(NULL)
       return(tibble::tibble(n_serie = !!n_serie,
                             parametro = copula$parametro[[1]]))
     })
@@ -113,8 +115,10 @@ MejorAjusteMultivariadoUC <- function(input.value, script, copulas.ajustadas, um
   # Se determinan las mátricas para la identificación de la cópula que mejor ajusta
   estadisticos <-  copulas_ajustadas_ubicacion %>% purrr::pmap_dfr(
     function(n_serie_perturbada, familia, bondad.ajuste, ...) {
+      # bondad.ajuste puede ser NA cuando AjustarCopulas no ajusto la copula (series no dependientes
+      # o no estacionarias): en ese caso no aporta estadisticos
       return(tidyr::crossing(n_serie_perturbada = n_serie_perturbada, familia = familia,
-                             bondad.ajuste$estadisticos))
+                             if (is.list(bondad.ajuste)) bondad.ajuste$estadisticos))
     })
   # Si NINGUNA familia pudo ajustarse en NINGUNA serie perturbada (ej.
   # dependencia no positiva en todas, ver AjustarCopulas), estadisticos no
@@ -201,7 +205,8 @@ MejorAjusteMultivariadoUC <- function(input.value, script, copulas.ajustadas, um
 }
 
 
-AjustarCopulas <- function(input.value, script, eventos.completos, umbral.p.valor, variables.discretas = NULL) {
+AjustarCopulas <- function(input.value, script, eventos.completos, umbral.p.valor, variables.discretas = NULL,
+                           exigir.estacionariedad = TRUE, exigir.serie.observada = TRUE) {
   # Obtener la ubicación y las variables de la copula, para cada serie perturbada 
   # (la distribución es única -la que mejor ajustó- para cada par ubicación, variable)
   vcu <- input.value
@@ -221,6 +226,16 @@ AjustarCopulas <- function(input.value, script, eventos.completos, umbral.p.valo
   # -----------------------------------------------------------------------------#
   
   if(! vcu$son_dependientes) 
+    return(input.value %>% dplyr::mutate(copula = list(NA), bondad.ajuste = list(NA)))
+  
+  # Salir tambien si alguna de las dos series no es estacionaria (salvo que se haya relajado
+  # el supuesto con exigir.estacionariedad: false en el archivo de parametros)
+  if(exigir.estacionariedad && !(isTRUE(vcu$x_es_estacionaria) && isTRUE(vcu$y_es_estacionaria))) 
+    return(input.value %>% dplyr::mutate(copula = list(NA), bondad.ajuste = list(NA)))
+  
+  # Salir tambien si la serie observada del par no paso los filtros: las series perturbadas solo dan
+  # robustez al ajuste, no habilitan una copula que la serie real no justifica (exigir.serie.observada)
+  if(exigir.serie.observada && !isTRUE(vcu$observada_valida)) 
     return(input.value %>% dplyr::mutate(copula = list(NA), bondad.ajuste = list(NA)))
   
   # ------------------------------------------------------------------------------
@@ -559,7 +574,7 @@ AjusteUnivariadoUVD <- function(input.value, script, serie.observada, umbral.p.v
 
 CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, eventos.completos,
                                      niveles.anios, resolucion.grilla, margen.grilla, dir.salida.png,
-                                     colorear.enso = TRUE) {
+                                     colorear.enso = TRUE, correccion.continuidad.duracion = TRUE) {
   # Ubicación y copula a analizar
   uc <- input.value
 
@@ -611,7 +626,10 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
   # abortar todo el script: se atrapa, se informa como warning y esa fila
   # se degrada a resultado NA (sin archivo_png ni grilla).
   resultado <- tryCatch({
-    grilla <- CalcularGrillaPeriodoRetorno(mv, N, n, grid_x, grid_y)
+    # Correccion de continuidad: la duracion es entera (dias), el modelo es continuo; ver CalcularGrillaPeriodoRetorno
+    grilla <- CalcularGrillaPeriodoRetorno(mv, N, n, grid_x, grid_y,
+                                           desplazar_x = ifelse(correccion.continuidad.duracion && identical(uc$variable_x, "duracion"), 0.5, 0),
+                                           desplazar_y = ifelse(correccion.continuidad.duracion && identical(uc$variable_y, "duracion"), 0.5, 0))
 
     id_valor  <- dplyr::pull(uc, !!id_column)
     archivo_png <- glue::glue("{dir.salida.png}/periodo_retorno_{id_valor}_{uc$variable_x}_{uc$variable_y}.png")
@@ -656,7 +674,7 @@ CalcularPeriodoRetornoUC <- function(input.value, script, copulas.finales, event
 
 CalcularPeriodoRetornoUV <- function(input.value, script, mejores.ajustes.univariados, eventos.completos,
                                      niveles.anios, resolucion.grilla, margen.grilla, dir.salida.png,
-                                     graficar.distribucion = FALSE) {
+                                     graficar.distribucion = FALSE, correccion.continuidad.duracion = TRUE) {
   # Ubicación y variable a analizar
   uv <- input.value
 
@@ -696,7 +714,8 @@ CalcularPeriodoRetornoUV <- function(input.value, script, mejores.ajustes.univar
   # Mismo criterio defensivo que CalcularPeriodoRetornoUC (ver fc17f05/373e1df):
   # un fallo puntual en una estacion+variable no debe abortar todo el script.
   resultado <- tryCatch({
-    grilla <- CalcularGrillaPeriodoRetornoUV(distribucion, parametros, N, n, grid_x)
+    grilla <- CalcularGrillaPeriodoRetornoUV(distribucion, parametros, N, n, grid_x,
+                                             desplazar_x = ifelse(correccion.continuidad.duracion && identical(uv$variable, "duracion"), 0.5, 0))
 
     archivo_png <- glue::glue("{dir.salida.png}/periodo_retorno_univariado_{id_valor}_{uv$variable}.png")
     titulo <- glue::glue("Período de retorno univariado - distribución {distribucion}\n",

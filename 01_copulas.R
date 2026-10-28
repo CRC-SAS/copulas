@@ -117,6 +117,10 @@ source(glue::glue("{config$dir$base}/lib/funciones_enso.R"), echo = FALSE)
 
 # c.1) Definir nombre del script
 script_name <- "CalcCopulas"
+
+# Reusar resultados guardados de una corrida anterior en vez de recalcularlos (ver parametros_copulas.yml)
+reusar.resultados <- isTRUE(config$params$reusar.resultados)
+exigir.estacionariedad.param <- ifelse(is.null(config$params$exigir.estacionariedad), TRUE, isTRUE(config$params$exigir.estacionariedad))
 script_logfile <- glue::glue("{config$dir$run}/{script_name}.log")
 
 # c.2) borrar archivo .log de corridas anteriores
@@ -336,46 +340,51 @@ if (file.exists(task_outfile))
 # Definir nombre del archivo donde se van a guardar los resultados
 results_filename <- glue::glue("{config$dir$data}/{config$files$copulas$ajustes_univariados}")
 
-# Borrar archivo de resultado de corridas anteriores
-if (file.exists(results_filename))
-  file.remove(results_filename)
-
-# Crear tarea distribuida y ejecutarla
-task <- Task$new(parent.script = script,
-                 func.name = function_name,
-                 packages = list.of.packages)
-
-# Informar inicio de ejecución 
-script$info("Computando ajuste univariado para cada combinación de ubicación, variable, distribución")
-# Ejecutar tarea distribuida
-ajuste.univariado.x.ubic.var.dist <- task$run(number.of.processes = config$max.procesos,
-                                              input.values = ubicacion_x_variable_x_distribucion,  
-                                              serie.observada = serie_observada_ajuste_univariado,
-                                              umbral.p.valor = config$params$umbral.p.valor,
-                                              variables.discretas = config$params$variables_sin_test_continuidad,
-                                              min.cantidad.valores = min_cantidad_valores)
-
-# Transformar resultados a un objeto de tipo tibble
-ajuste.univariado.x.ubic.var.dist <- ajuste.univariado.x.ubic.var.dist %>% purrr::map_dfr(~.x)
-
-# Agregar log de la tarea al log del script
-file.append(script_logfile, task_logfile)
-
-# Si hay errores, terminar ejecucion
-task.errors <- task$getErrors()
-if (length(task.errors) > 0) {
-  for (error.obj in task.errors) {
-    id_column <- IdentificarIdColumn(ubicacion_x_variable_x_distribucion[1,])
-    script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
-                           "variable=\"{error.obj$input.value[['variable']]}\", ",
-                           "distribucion=\"{error.obj$input.value[['distribucion']]}\")",
-                           ": {error.obj$error}"))
-  }
-  script$error("Finalizando script de forma ANORMAL")
+if (reusar.resultados && file.exists(results_filename)) {
+  script$info(glue::glue("Reusando resultados previos de {results_filename}"))
+  ajuste.univariado.x.ubic.var.dist <- base::readRDS(results_filename)
 } else {
-  # Guardar resultados en un archivo fácil de compartir
-  script$info(glue::glue("Guardando ajustes univariados en el archivo {results_filename}"))
-  base::saveRDS(ajuste.univariado.x.ubic.var.dist, results_filename)
+  # Borrar archivo de resultado de corridas anteriores
+  if (file.exists(results_filename))
+    file.remove(results_filename)
+
+  # Crear tarea distribuida y ejecutarla
+  task <- Task$new(parent.script = script,
+                   func.name = function_name,
+                   packages = list.of.packages)
+
+  # Informar inicio de ejecución 
+  script$info("Computando ajuste univariado para cada combinación de ubicación, variable, distribución")
+  # Ejecutar tarea distribuida
+  ajuste.univariado.x.ubic.var.dist <- task$run(number.of.processes = config$max.procesos,
+                                                input.values = ubicacion_x_variable_x_distribucion,  
+                                                serie.observada = serie_observada_ajuste_univariado,
+                                                umbral.p.valor = config$params$umbral.p.valor,
+                                                variables.discretas = config$params$variables_sin_test_continuidad,
+                                                min.cantidad.valores = min_cantidad_valores)
+
+  # Transformar resultados a un objeto de tipo tibble
+  ajuste.univariado.x.ubic.var.dist <- ajuste.univariado.x.ubic.var.dist %>% purrr::map_dfr(~.x)
+
+  # Agregar log de la tarea al log del script
+  file.append(script_logfile, task_logfile)
+
+  # Si hay errores, terminar ejecucion
+  task.errors <- task$getErrors()
+  if (length(task.errors) > 0) {
+    for (error.obj in task.errors) {
+      id_column <- IdentificarIdColumn(ubicacion_x_variable_x_distribucion[1,])
+      script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
+                             "variable=\"{error.obj$input.value[['variable']]}\", ",
+                             "distribucion=\"{error.obj$input.value[['distribucion']]}\")",
+                             ": {error.obj$error}"))
+    }
+    script$error("Finalizando script de forma ANORMAL")
+  } else {
+    # Guardar resultados en un archivo fácil de compartir
+    script$info(glue::glue("Guardando ajustes univariados en el archivo {results_filename}"))
+    base::saveRDS(ajuste.univariado.x.ubic.var.dist, results_filename)
+  }
 }
 
 # ------------------------------------------------------------------------------
@@ -411,42 +420,47 @@ if (file.exists(task_outfile))
 # Definir nombre del archivo donde se van a guardar los resultados
 results_filename <- glue::glue("{config$dir$data}/{config$files$copulas$mejores_ajustes_univariados}")
 
-# Borrar archivo de resultado de corridas anteriores
-if (file.exists(results_filename))
-  file.remove(results_filename)
-
-# Crear tarea distribuida y ejecutarla
-task.mejor.ajuste <- Task$new(parent.script = script,
-                              func.name = function_name,
-                              packages = list.of.packages)
-
-# Informar inicio de ejecución 
-script$info("Determinando mejor ajuste univariado para cada combinación de ubicación, variable")
-# Ejecutar tarea distribuida
-mejor.ajuste.univariado.x.ubic.var <- task.mejor.ajuste$run(number.of.processes = config$max.procesos,
-                                                            input.values = ubicacion_x_variable,  
-                                                            ajustes.univariados = ajuste.univariado.x.ubic.var.dist)
-
-# Transformar resultados a un objeto de tipo tibble
-mejor.ajuste.univariado.x.ubic.var <- mejor.ajuste.univariado.x.ubic.var %>% purrr::map_dfr(~.x)
-
-# Agregar log de la tarea al log del script
-file.append(script_logfile, task_logfile)
-
-# Si hay errores, terminar ejecucion
-task.mejor.ajuste.errors <- task.mejor.ajuste$getErrors()
-if (length(task.mejor.ajuste.errors) > 0) {
-  for (error.obj in task.mejor.ajuste.errors) {
-    id_column <- IdentificarIdColumn(ubicacion_x_variable[1,])
-    script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
-                           "variable=\"{error.obj$input.value[['variable']]}\")",
-                           ": {error.obj$error}"))
-  }
-  script$error("Finalizando script de forma ANORMAL")
+if (reusar.resultados && file.exists(results_filename)) {
+  script$info(glue::glue("Reusando resultados previos de {results_filename}"))
+  mejor.ajuste.univariado.x.ubic.var <- base::readRDS(results_filename)
 } else {
-  # Guardar resultados en un archivo fácil de compartir
-  script$info(glue::glue("Guardando mejores ajustes univariados en el archivo {results_filename}"))
-  base::saveRDS(mejor.ajuste.univariado.x.ubic.var, results_filename)
+  # Borrar archivo de resultado de corridas anteriores
+  if (file.exists(results_filename))
+    file.remove(results_filename)
+
+  # Crear tarea distribuida y ejecutarla
+  task.mejor.ajuste <- Task$new(parent.script = script,
+                                func.name = function_name,
+                                packages = list.of.packages)
+
+  # Informar inicio de ejecución 
+  script$info("Determinando mejor ajuste univariado para cada combinación de ubicación, variable")
+  # Ejecutar tarea distribuida
+  mejor.ajuste.univariado.x.ubic.var <- task.mejor.ajuste$run(number.of.processes = config$max.procesos,
+                                                              input.values = ubicacion_x_variable,  
+                                                              ajustes.univariados = ajuste.univariado.x.ubic.var.dist)
+
+  # Transformar resultados a un objeto de tipo tibble
+  mejor.ajuste.univariado.x.ubic.var <- mejor.ajuste.univariado.x.ubic.var %>% purrr::map_dfr(~.x)
+
+  # Agregar log de la tarea al log del script
+  file.append(script_logfile, task_logfile)
+
+  # Si hay errores, terminar ejecucion
+  task.mejor.ajuste.errors <- task.mejor.ajuste$getErrors()
+  if (length(task.mejor.ajuste.errors) > 0) {
+    for (error.obj in task.mejor.ajuste.errors) {
+      id_column <- IdentificarIdColumn(ubicacion_x_variable[1,])
+      script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
+                             "variable=\"{error.obj$input.value[['variable']]}\")",
+                             ": {error.obj$error}"))
+    }
+    script$error("Finalizando script de forma ANORMAL")
+  } else {
+    # Guardar resultados en un archivo fácil de compartir
+    script$info(glue::glue("Guardando mejores ajustes univariados en el archivo {results_filename}"))
+    base::saveRDS(mejor.ajuste.univariado.x.ubic.var, results_filename)
+  }
 }
 
 # ------------------------------------------------------------------------------
@@ -491,46 +505,51 @@ if (file.exists(task_outfile))
 # Definir nombre del archivo donde se van a guardar los resultados
 results_filename <- glue::glue("{config$dir$data}/{config$files$copulas$series_perturbadas_ajustadas}")
 
-# Borrar archivo de resultado de corridas anteriores
-if (file.exists(results_filename))
-  file.remove(results_filename)
-
-# Crear tarea distribuida y ejecutarla
-task <- Task$new(parent.script = script,
-                 func.name = function_name,
-                 packages = list.of.packages)
-
-# Informar inicio de ejecución 
-script$info("Generar series perturbadas y aplicarles el mejor ajuste")
-# Ejecutar tarea distribuida
-series.perturbadas.ajustadas <- task$run(number.of.processes = config$max.procesos,
-                                         input.values = mejor_ajuste_x_serie_perturbada,  
-                                         series.perturbadas = series_perturbadas,
-                                         min.cantidad.valores = min_cantidad_valores)
-
-# Transformar resultados a un objeto de tipo tibble
-series.perturbadas.ajustadas <- series.perturbadas.ajustadas %>% purrr::map_dfr(~.x)
-
-# Agregar log de la tarea al log del script
-file.append(script_logfile, task_logfile)
-
-# Si hay errores, terminar ejecucion
-task.errors <- task$getErrors()
-if (length(task.errors) > 0) {
-  for (error.obj in task.errors) {
-    id_column <- IdentificarIdColumn(mejor_ajuste_x_serie_perturbada[1,])
-    script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
-                           "variable=\"{error.obj$input.value[['variable']]}\", ",
-                           "distribucion=\"{error.obj$input.value[['distribucion']]}\", ",
-                           "tipo_serie=\"{error.obj$input.value[['tipo_serie']]}\", ",
-                           "n_serie={error.obj$input.value[['n_serie']]})",
-                           ": {error.obj$error}"))
-  }
-  script$error("Finalizando script de forma ANORMAL")
+if (reusar.resultados && file.exists(results_filename)) {
+  script$info(glue::glue("Reusando resultados previos de {results_filename}"))
+  series.perturbadas.ajustadas <- base::readRDS(results_filename)
 } else {
-  # Guardar resultados en un archivo fácil de compartir
-  script$info(glue::glue("Guardando las series perturbadas y sus ajustes univariados en el archivo {results_filename}"))
-  base::saveRDS(series.perturbadas.ajustadas, results_filename)
+  # Borrar archivo de resultado de corridas anteriores
+  if (file.exists(results_filename))
+    file.remove(results_filename)
+
+  # Crear tarea distribuida y ejecutarla
+  task <- Task$new(parent.script = script,
+                   func.name = function_name,
+                   packages = list.of.packages)
+
+  # Informar inicio de ejecución 
+  script$info("Generar series perturbadas y aplicarles el mejor ajuste")
+  # Ejecutar tarea distribuida
+  series.perturbadas.ajustadas <- task$run(number.of.processes = config$max.procesos,
+                                           input.values = mejor_ajuste_x_serie_perturbada,  
+                                           series.perturbadas = series_perturbadas,
+                                           min.cantidad.valores = min_cantidad_valores)
+
+  # Transformar resultados a un objeto de tipo tibble
+  series.perturbadas.ajustadas <- series.perturbadas.ajustadas %>% purrr::map_dfr(~.x)
+
+  # Agregar log de la tarea al log del script
+  file.append(script_logfile, task_logfile)
+
+  # Si hay errores, terminar ejecucion
+  task.errors <- task$getErrors()
+  if (length(task.errors) > 0) {
+    for (error.obj in task.errors) {
+      id_column <- IdentificarIdColumn(mejor_ajuste_x_serie_perturbada[1,])
+      script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
+                             "variable=\"{error.obj$input.value[['variable']]}\", ",
+                             "distribucion=\"{error.obj$input.value[['distribucion']]}\", ",
+                             "tipo_serie=\"{error.obj$input.value[['tipo_serie']]}\", ",
+                             "n_serie={error.obj$input.value[['n_serie']]})",
+                             ": {error.obj$error}"))
+    }
+    script$error("Finalizando script de forma ANORMAL")
+  } else {
+    # Guardar resultados en un archivo fácil de compartir
+    script$info(glue::glue("Guardando las series perturbadas y sus ajustes univariados en el archivo {results_filename}"))
+    base::saveRDS(series.perturbadas.ajustadas, results_filename)
+  }
 }
 
 # ------------------------------------------------------------------------------
@@ -573,47 +592,57 @@ if (file.exists(task_outfile))
 # Definir nombre del archivo donde se van a guardar los resultados
 results_filename <- glue::glue("{config$dir$data}/{config$files$copulas$estacionariedad}")
 
-# Borrar archivo de resultado de corridas anteriores
-if (file.exists(results_filename))
-  file.remove(results_filename)
-
-# Crear tarea distribuida y ejecutarla
-task <- Task$new(parent.script = script,
-                 func.name = function_name,
-                 packages = list.of.packages)
-
-# Informar inicio de ejecución 
-script$info("Determinar estacionariedad, tanto de la serie observada como de las series perturbadas")
-# Ejecutar tarea distribuida
-estacionariedad <- task$run(number.of.processes = config$max.procesos,
-                            input.values = series_a_computar, 
-                            eventos.completos = eventos_completos,
-                            tests.estacionariedad = config$params$tests.estacionariedad,
-                            umbral.p.valor = config$params$umbral.p.valor)
-
-# Transformar resultados a un objeto de tipo tibble
-estacionariedad <- estacionariedad %>% purrr::map_dfr(~.x)
-
-# Agregar log de la tarea al log del script
-file.append(script_logfile, task_logfile)
-
-# Si hay errores, terminar ejecucion
-task.errors <- task$getErrors()
-if (length(task.errors) > 0) {
-  for (error.obj in task.errors) {
-    id_column <- IdentificarIdColumn(series_a_computar[1,])
-    script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
-                           "variable=\"{error.obj$input.value[['variable']]}\", ",
-                           "tipo_serie=\"{error.obj$input.value[['tipo_serie']]}\", ",
-                           "n_serie={error.obj$input.value[['n_serie']]}, ",
-                           "realizacion={error.obj$input.value[['realizacion']]})",
-                           ": {error.obj$error}"))
-  }
-  script$error("Finalizando script de forma ANORMAL")
+if (reusar.resultados && file.exists(results_filename)) {
+  script$info(glue::glue("Reusando resultados previos de {results_filename}"))
+  estacionariedad <- base::readRDS(results_filename)
 } else {
-  # Guardar resultados en un archivo fácil de compartir
-  script$info(glue::glue("Guardando estacionariedad de las series en el archivo {results_filename}"))
-  base::saveRDS(estacionariedad, results_filename)
+  # Borrar archivo de resultado de corridas anteriores
+  if (file.exists(results_filename))
+    file.remove(results_filename)
+
+  # Crear tarea distribuida y ejecutarla
+  task <- Task$new(parent.script = script,
+                   func.name = function_name,
+                   packages = list.of.packages)
+
+  # Informar inicio de ejecución 
+  script$info("Determinar estacionariedad, tanto de la serie observada como de las series perturbadas")
+  # Umbral de p-valor por test, con correccion por tests multiples (ver parametros_copulas.yml)
+  umbral.estacionariedad <- UmbralEstacionariedad(config$params$umbral.p.valor,
+                                                  length(config$params$tests.estacionariedad),
+                                                  config$params$correccion.estacionariedad)
+  script$info(glue::glue("Umbral de p-valor por test de estacionariedad: {umbral.estacionariedad}"))
+  # Ejecutar tarea distribuida
+  estacionariedad <- task$run(number.of.processes = config$max.procesos,
+                              input.values = series_a_computar, 
+                              eventos.completos = eventos_completos,
+                              tests.estacionariedad = config$params$tests.estacionariedad,
+                              umbral.p.valor = umbral.estacionariedad)
+
+  # Transformar resultados a un objeto de tipo tibble
+  estacionariedad <- estacionariedad %>% purrr::map_dfr(~.x)
+
+  # Agregar log de la tarea al log del script
+  file.append(script_logfile, task_logfile)
+
+  # Si hay errores, terminar ejecucion
+  task.errors <- task$getErrors()
+  if (length(task.errors) > 0) {
+    for (error.obj in task.errors) {
+      id_column <- IdentificarIdColumn(series_a_computar[1,])
+      script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
+                             "variable=\"{error.obj$input.value[['variable']]}\", ",
+                             "tipo_serie=\"{error.obj$input.value[['tipo_serie']]}\", ",
+                             "n_serie={error.obj$input.value[['n_serie']]}, ",
+                             "realizacion={error.obj$input.value[['realizacion']]})",
+                             ": {error.obj$error}"))
+    }
+    script$error("Finalizando script de forma ANORMAL")
+  } else {
+    # Guardar resultados en un archivo fácil de compartir
+    script$info(glue::glue("Guardando estacionariedad de las series en el archivo {results_filename}"))
+    base::saveRDS(estacionariedad, results_filename)
+  }
 }
 
 # Consolidar resultados. La estacionariedad es la única métrica en la que se consideran
@@ -622,7 +651,7 @@ if (length(task.errors) > 0) {
 # es tomar la estacionaridad de la mayoría de las realizaciones.
 estacionariedad.consolidada <- estacionariedad %>%
   dplyr::group_by(!!rlang::sym(id_column), nombre, variable, tipo_serie, n_serie) %>%
-  dplyr::summarise(es_estacionaria = sum(es_estacionaria) >= round(n()/2))
+  dplyr::summarise(es_estacionaria = ConsolidarEstacionariedad(es_estacionaria), .groups = "drop")
 
 # ------------------------------------------------------------------------------
 
@@ -714,6 +743,10 @@ if (length(task.errors) > 0) {
 # Definir el objetos sobre los cuales iterar
 copulas_a_ajustar <- dependencia %>%
   dplyr::select(-detalles_dependencia, -segundos_calc_dependencia) %>%
+  dplyr::group_by(dplyr::across(dplyr::all_of(c(IdentificarIdColumn(dependencia[1,]), "variable_x", "variable_y")))) %>%
+  # La serie observada debe ser estacionaria y dependiente; si no, no se ajusta ninguna serie perturbada del par
+  dplyr::mutate(observada_valida = any(tipo_serie == "observada" & son_dependientes & x_es_estacionaria & y_es_estacionaria)) %>%
+  dplyr::ungroup() %>%
   tidyr::crossing(configuracion.ajuste.copula)
 
 
@@ -733,46 +766,83 @@ if (file.exists(task_outfile))
 # Definir nombre del archivo donde se van a guardar los resultados
 results_filename <- glue::glue("{config$dir$data}/{config$files$copulas$ajustes_multivariados}")
 
-# Borrar archivo de resultado de corridas anteriores
-if (file.exists(results_filename))
-  file.remove(results_filename)
-
-# Crear tarea distribuida y ejecutarla
-task <- Task$new(parent.script = script,
-                 func.name = function_name,
-                 packages = list.of.packages)
-
-# Informar inicio de ejecución 
-script$info("Ajustar las cópulas usando las series perturbadas estacionarias y dependientes")
-# Ejecutar tarea distribuida
-copulas.ajustadas <- task$run(number.of.processes = config$max.procesos,
-                              input.values = copulas_a_ajustar,
-                              eventos.completos = eventos_completos,
-                              umbral.p.valor = config$params$umbral.p.valor,
-                              variables.discretas = config$params$variables_sin_test_continuidad)
-
-# Transformar resultados a un objeto de tipo tibble
-copulas.ajustadas <- copulas.ajustadas %>% purrr::map_dfr(~.x)
-
-# Agregar log de la tarea al log del script
-file.append(script_logfile, task_logfile)
-
-# Si hay errores, terminar ejecucion
-task.errors <- task$getErrors()
-if (length(task.errors) > 0) {
-  for (error.obj in task.errors) {
-    id_column <- IdentificarIdColumn(copulas_a_ajustar[1,])
-    script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
-                           "copula=\"{error.obj$input.value[['variable_x']]}-{error.obj$input.value[['variable_y']]}\")",
-                           "tipo_serie=\"{error.obj$input.value[['tipo_serie']]}\", ",
-                           "n_serie={error.obj$input.value[['n_serie']]})",
-                           ": {error.obj$error}"))
+# Reusar resultados de una corrida anterior (parametro reusar.resultados): se leen los ajustes ya calculados y se anulan
+# los que no cumplen los filtros vigentes (dependencia y estacionariedad). Equivale a una corrida completa siempre que los
+# filtros actuales sean al menos tan estrictos como los de la corrida que genero el archivo.
+if (reusar.resultados && file.exists(results_filename)) {
+  script$info(glue::glue("Reusando los ajustes multivariados de {results_filename} con los filtros vigentes"))
+  ajustes.previos <- base::readRDS(results_filename)
+  claves <- c(IdentificarIdColumn(copulas_a_ajustar[1,]), "nombre", "tipo_serie", "n_serie", "variable_x", "variable_y", "familia")
+  copulas.ajustadas <- copulas_a_ajustar %>%
+    dplyr::left_join(ajustes.previos %>% dplyr::select(dplyr::all_of(claves), copula, bondad.ajuste), by = claves)
+  exigir.observada.param <- ifelse(is.null(config$params$exigir.serie.observada), TRUE, isTRUE(config$params$exigir.serie.observada))
+  pasa.filtros <- (!exigir.observada.param | copulas.ajustadas$observada_valida) & copulas.ajustadas$son_dependientes %in% TRUE &
+    (!exigir.estacionariedad.param | (copulas.ajustadas$x_es_estacionaria %in% TRUE & copulas.ajustadas$y_es_estacionaria %in% TRUE))
+  copulas.ajustadas$copula[!pasa.filtros] <- list(NA)
+  copulas.ajustadas$bondad.ajuste[!pasa.filtros] <- list(NA)
+  # Los que pasan los filtros vigentes y no tienen ajuste previo (p.ej. el test de dependencia cambio de resultado) se ajustan ahora
+  faltan <- pasa.filtros & !purrr::map_lgl(copulas.ajustadas$copula, is.list)
+  if (any(faltan)) {
+    script$info(glue::glue("Ajustando {sum(faltan)} copulas que pasan los filtros y no estaban en el archivo previo"))
+    task <- Task$new(parent.script = script, func.name = function_name, packages = list.of.packages)
+    nuevos <- task$run(number.of.processes = config$max.procesos,
+                       input.values = copulas_a_ajustar[faltan, ],
+                       eventos.completos = eventos_completos,
+                       umbral.p.valor = config$params$umbral.p.valor,
+                       variables.discretas = config$params$variables_sin_test_continuidad,
+                       exigir.estacionariedad = exigir.estacionariedad.param,
+                       exigir.serie.observada = exigir.observada.param)
+    nuevos <- nuevos %>% purrr::map_dfr(~.x)
+    file.append(script_logfile, task_logfile)
+    if (length(task$getErrors()) > 0)
+      script$error("Finalizando script de forma ANORMAL: errores al ajustar copulas nuevas")
+    copulas.ajustadas <- dplyr::bind_rows(copulas.ajustadas[!faltan, ], nuevos[, names(copulas.ajustadas)])
   }
-  script$error("Finalizando script de forma ANORMAL")
-} else {
-  # Guardar resultados en un archivo fácil de compartir
-  script$info(glue::glue("Guardando los ajustes multivariados en el archivo {results_filename}"))
   base::saveRDS(copulas.ajustadas, results_filename)
+} else {
+  # Borrar archivo de resultado de corridas anteriores
+  if (file.exists(results_filename))
+    file.remove(results_filename)
+
+  # Crear tarea distribuida y ejecutarla
+  task <- Task$new(parent.script = script,
+                   func.name = function_name,
+                   packages = list.of.packages)
+
+  # Informar inicio de ejecución 
+  script$info("Ajustar las cópulas usando las series perturbadas estacionarias y dependientes")
+  # Ejecutar tarea distribuida
+  copulas.ajustadas <- task$run(number.of.processes = config$max.procesos,
+                                input.values = copulas_a_ajustar,
+                                eventos.completos = eventos_completos,
+                                umbral.p.valor = config$params$umbral.p.valor,
+                                variables.discretas = config$params$variables_sin_test_continuidad,
+                                exigir.estacionariedad = ifelse(is.null(config$params$exigir.estacionariedad), TRUE, isTRUE(config$params$exigir.estacionariedad)),
+                              exigir.serie.observada = ifelse(is.null(config$params$exigir.serie.observada), TRUE, isTRUE(config$params$exigir.serie.observada)))
+
+  # Transformar resultados a un objeto de tipo tibble
+  copulas.ajustadas <- copulas.ajustadas %>% purrr::map_dfr(~.x)
+
+  # Agregar log de la tarea al log del script
+  file.append(script_logfile, task_logfile)
+
+  # Si hay errores, terminar ejecucion
+  task.errors <- task$getErrors()
+  if (length(task.errors) > 0) {
+    for (error.obj in task.errors) {
+      id_column <- IdentificarIdColumn(copulas_a_ajustar[1,])
+      script$warn(glue::glue("({id_column}={error.obj$input.value[[id_column]]}, ",
+                             "copula=\"{error.obj$input.value[['variable_x']]}-{error.obj$input.value[['variable_y']]}\")",
+                             "tipo_serie=\"{error.obj$input.value[['tipo_serie']]}\", ",
+                             "n_serie={error.obj$input.value[['n_serie']]})",
+                             ": {error.obj$error}"))
+    }
+    script$error("Finalizando script de forma ANORMAL")
+  } else {
+    # Guardar resultados en un archivo fácil de compartir
+    script$info(glue::glue("Guardando los ajustes multivariados en el archivo {results_filename}"))
+    base::saveRDS(copulas.ajustadas, results_filename)
+  }
 }
 
 # ------------------------------------------------------------------------------
@@ -980,7 +1050,8 @@ if (nrow(periodo_retorno_input) == 0) {
                               resolucion.grilla = config$params$periodo_retorno$resolucion_grilla,
                               margen.grilla = config$params$periodo_retorno$margen_grilla,
                               dir.salida.png = glue::glue("{config$dir$data}/output"),
-                              colorear.enso = !isFALSE(config$params$periodo_retorno$colorear_enso))
+                              colorear.enso = !isFALSE(config$params$periodo_retorno$colorear_enso),
+                              correccion.continuidad.duracion = !isFALSE(config$params$periodo_retorno$correccion_continuidad_duracion))
 
   # Transformar resultados a un objeto de tipo tibble
   periodo.retorno <- periodo.retorno %>% purrr::map_dfr(~.x)
@@ -1067,7 +1138,8 @@ if (nrow(periodo_retorno_univariado_input) == 0) {
                                          resolucion.grilla = config$params$periodo_retorno$resolucion_grilla,
                                          margen.grilla = config$params$periodo_retorno$margen_grilla,
                                          dir.salida.png = glue::glue("{config$dir$data}/output"),
-                                         graficar.distribucion = isTRUE(config$params$periodo_retorno$graficar_distribucion_ajuste))
+                                         graficar.distribucion = isTRUE(config$params$periodo_retorno$graficar_distribucion_ajuste),
+                                         correccion.continuidad.duracion = !isFALSE(config$params$periodo_retorno$correccion_continuidad_duracion))
 
   # Transformar resultados a un objeto de tipo tibble
   periodo.retorno.univariado <- periodo.retorno.univariado %>% purrr::map_dfr(~.x)

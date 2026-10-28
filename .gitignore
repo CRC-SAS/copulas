@@ -43,3 +43,9 @@ vignettes/*.pdf
 !param*.yml
 **/.svn_ignore.txt
 pruebas/
+
+# Respaldos de corridas, resultados empaquetados y archivos de trabajo locales
+data/respaldo_*/
+*_resultados_*.zip
+Olas_20.rds
+eventos_frio_calor_enso_*.csv

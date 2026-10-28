@@ -138,6 +138,27 @@ umbral.p.valor: 0.05
 # ------------------------------------------------------------------------------
 
 # ------------------------------------------------------------------------------
+# Correccion del umbral de p-valor en los tests de estacionariedad.
+# Una serie es estacionaria solo si pasa TODOS los tests de tests.estacionariedad; con umbral
+# alfa en cada uno, la probabilidad de rechazar por azar una serie estacionaria llega a
+# 1-(1-alfa)^n (23% con 5 tests y alfa = 0,05).
+#   bonferroni (por defecto): umbral por test = umbral.p.valor / cantidad de tests (0,05/5 = 0,01)
+#   ninguna:                  umbral.p.valor en cada test
+# ------------------------------------------------------------------------------
+correccion.estacionariedad: bonferroni
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
+# Exigir que las dos series sean estacionarias para ajustar la copula.
+#   true  (valor riguroso, por defecto): solo se ajusta si ambas series pasan los tests de
+#         estacionariedad (ademas de los de dependencia).
+#   false (supuesto relajado): se ajusta igual; la estacionariedad queda solo como informacion
+#         (columna es_estacionaria en estacionariedad_*.rds). Documentar la diferencia de resultados.
+# ------------------------------------------------------------------------------
+exigir.estacionariedad: true
+# ------------------------------------------------------------------------------
+
+# ------------------------------------------------------------------------------
 # Variables cuya serie es discreta (pocos valores distintos, muchos empates,
 # ej. duracion medida en dias/pentadas enteras) para las que los tests de
 # bondad de ajuste KS/Anderson-Darling/Cramér-von Mises (que asumen una
@@ -159,6 +180,10 @@ periodo_retorno:
   # Cuanto extender la grilla mas alla del maximo observado, como fraccion
   # del rango observado de cada variable (0 = no extender)
   margen_grilla: 0.4
+  # Correccion de continuidad para la duracion (entera, en dias): "duracion >= k" se evalua en k - 0.5 porque el modelo
+  # es continuo y un evento de k dias ocupa (k - 0.5, k + 0.5]. Sin la correccion (false) la probabilidad conjunta queda
+  # sobrestimada ~25 a 30 % y el periodo de retorno subestimado. En el grafico la duracion se sigue mostrando en dias enteros.
+  correccion_continuidad_duracion: true
   # Si es TRUE, ademas de la curva de periodo de retorno univariado (PASO 14)
   # genera por cada estacion+variable un histograma de los eventos observados
   # con la densidad de la distribucion ganadora superpuesta (analogo a la
@@ -245,3 +270,12 @@ configuracion.ajuste.univariado:
   - [	"wak",	"AjustarLMomentosWakeby",                         "AjustarMaximaVerosimilitudWakeby",                        FALSE ]
   - [	"wei",	"AjustarLMomentosWeibull",                        "AjustarMaximaVerosimilitudWeibull",                       TRUE  ]
 # ------------------------------------------------------------------------------
+
+# Reusar los resultados guardados (ajustes univariados, series perturbadas, estacionariedad y ajustes de copulas) de una corrida
+# anterior en vez de recalcularlos; los ajustes de copulas se anulan si no pasan los filtros vigentes.
+# Solo es valido si los filtros actuales son al menos tan estrictos como los de la corrida anterior.
+reusar.resultados: false
+
+# Exigir que la serie observada del par (estacion x variables) sea estacionaria y dependiente para ajustar cualquier copula del par.
+# Con false, alcanza con que pase alguna de las series perturbadas (criterio original del pipeline).
+exigir.serie.observada: true
