@@ -222,7 +222,7 @@ done</code></pre>
 <tr><td><code>periodo_retorno.niveles_anios</code></td><td>Los períodos de retorno de las isolíneas del gráfico (por defecto 2, 5, 10, 20, 50, 100, 200, 500).</td></tr>
 <tr><td><code>periodo_retorno.correccion_continuidad_duracion</code></td><td><code>true</code> por defecto. Hace que «duración de al menos 5 días» se evalúe a 4,5, porque la duración es entera. Con <code>false</code> el período de retorno de combinaciones con duración sale subestimado.</td></tr>
 <tr><td><code>periodo_retorno.graficar_distribucion_ajuste</code></td><td><code>false</code> por defecto. Con <code>true</code> genera un histograma por estación y variable (muchos PNG).</td></tr>
-<tr><td><code>n.series.perturbadas</code>, <code>s.series.perturbadas</code></td><td>Cantidad de series con ruido (2) y semilla (123). Dejalos como están para poder comparar con otras corridas.</td></tr>
+<tr><td><code>n.series.perturbadas</code>, <code>s.series.perturbadas</code></td><td>Cantidad de series con ruido (2) y semilla (123). La semilla también fija todos los pasos con simulación. Dejalos como están para poder comparar con otras corridas.</td></tr>
 </table>
 
 <!-- ============================================================ -->
@@ -302,7 +302,7 @@ g[i, ]                                    # T en años</code></pre>
 <tr><td>Una variable no se ajusta (resultado vacío)</td><td>Tiene menos eventos que <code>min_cantidad_valores_ajuste_univariado</code> (30 por defecto). Bajalo si corresponde, sabiendo que con pocos eventos el resultado es menos confiable.</td></tr>
 <tr><td>Una estación no tiene gráfico para un par de variables</td><td>No pasó los filtros de dependencia o estacionariedad, o ninguna familia de cópula ajustó bien. Es un resultado, no un error. En las olas de calor y de frío es frecuente: tienen pocos eventos por estación.</td></tr>
 <tr><td>Los gráficos de dos corridas se pisaron</td><td>Los PNG no llevan el identificador de la corrida. Movelos a otra carpeta antes de la corrida siguiente (<a href="#varios">sección 5</a>).</td></tr>
-<tr><td>Dos corridas iguales dan números levemente distintos</td><td>Algunos pasos usan números aleatorios que no se fijan (por ejemplo, el desempate de rangos y los tests de bondad de ajuste). Las diferencias pequeñas son normales. Si necesitás exactamente los mismos números más adelante, conservá los <code>.rds</code> de resultados de la corrida.</td></tr>
+<tr><td>Una corrida da números distintos a los de otra anterior</td><td>Con la misma versión del código, los mismos datos y la misma <code>s.series.perturbadas</code>, las corridas dan los mismos resultados (cada tarea usa su propia semilla). Si usás resultados de antes de octubre de 2026, el código cambió: se corrigió el ruido de las series perturbadas, el BIC y las semillas, así que los valores pueden diferir levemente. Conservá los <code>.rds</code> de las corridas que vas a citar.</td></tr>
 <tr><td>Quiero ver qué está pasando</td><td><code>run/CalcCopulas.log</code> tiene el resumen, y cada paso paralelo deja su registro en <code>run/CalcCopulas-&lt;NombreDelPaso&gt;.log</code>. Para ver el error real de una tarea que falló, reproducí la llamada fuera del cluster, en una sesión de R común.</td></tr>
 </table>
 

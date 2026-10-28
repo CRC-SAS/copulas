@@ -34,7 +34,7 @@
   <li><a href="#retorno">8. Período de retorno</a>
     <ul><li><a href="#retorno-biv">8.1 Combinado</a></li><li><a href="#continuidad">8.2 Continuidad</a></li><li><a href="#retorno-uni">8.3 Univariado</a></li><li><a href="#via-magnitud">8.4 Vía duración–magnitud</a></li></ul></li>
   <li><a href="#resultados">9. Qué pasó en la aplicación a temperaturas</a></li>
-  <li><a href="#limites">10. Limitaciones y observaciones</a></li>
+  <li><a href="#limites">10. Limitaciones y correcciones</a></li>
   <li><a href="#repro">11. Reproducibilidad</a></li>
   <li><a href="#parametros">12. Parámetros</a></li>
   <li><a href="#refs">13. Referencias</a></li>
@@ -122,14 +122,15 @@
 
 <h3 id="perturbadas">2.3 Series observada y series perturbadas</h3>
 <p>Para cada ubicación y variable el pipeline trabaja con tres series: la <strong>observada</strong> (<code>n_serie = 0</code>) y <code>n.series.perturbadas</code> series <strong>perturbadas</strong> (2 por defecto). Una serie perturbada es la observada con un ruido uniforme pequeño sumado a cada valor:</p>
-$$ x'_i = x_i + v \cdot U_i, \qquad U_i \sim \mathrm{Uniforme}(0,\, v) $$
-<p>donde \(v\) es el <em>valor mínimo de detección</em> de la variable (<code>valores_minimos</code>: 1 para la duración y 0,1 para las demás). El ruido tiene dos propósitos:</p>
+$$ x'_i = x_i + U_i, \qquad U_i \sim \mathrm{Uniforme}(0,\, v) $$
+<p>donde \(v\) es el <em>valor mínimo de detección</em> de la variable (<code>valores_minimos</code>: 1 para la duración y 0,1 para las demás), es decir, la unidad mínima de medida. El ruido tiene dos propósitos:</p>
 <ol>
   <li><strong>Romper empates.</strong> Las cópulas trabajan sobre rangos, y una duración entera con muchos valores repetidos produce rangos empatados. Los tests y los ajustes asumen variables continuas.</li>
   <li><strong>Propagar la incertidumbre de la discretización.</strong> Se repite el ajuste en varias versiones de los datos, y el parámetro final de la cópula es la mediana entre ellas (sección <a href="#gof-cop">7</a>).</li>
 </ol>
 <p>La semilla (<code>s.series.perturbadas</code>, 123 por defecto) se guarda junto con los resultados para poder regenerar las mismas series.</p>
-<div class="nota"><p><strong>Dos usos distintos del ruido.</strong> Las distribuciones marginales se ajustan sobre la serie <em>observada</em> a la que se le agrega un jitter simétrico mínimo (solo a <code>duracion</code> y <code>minimo</code>, con la función <code>jitter()</code> de R, cuya amplitud es proporcional al menor salto entre valores distintos; para la duración entera es de ±0,4 días). Ese ruido es independiente del de las series perturbadas y no se agrega antes de generarlas. Las series perturbadas se ajustan también (paso 7) con la mejor distribución de cada variable, pero esos parámetros no intervienen en la cópula final, que usa las marginales de la serie observada.</p></div>
+<div class="ojo"><p>Hasta la corrida <code>Olas_20</code> el ruido se calculaba como \(v \cdot U(0, v)\) (rango \([0, v^2]\)), y era diez veces menor que el pretendido para las variables con \(v = 0{,}1\). Se corrigió (ver la <a href="#correcciones">sección 10</a>); para la duración (\(v = 1\)) no cambia nada.</p></div>
+<div class="nota"><p><strong>Dos usos distintos del ruido.</strong> Las distribuciones marginales se ajustan sobre la serie <em>observada</em> a la que se le agrega un jitter simétrico mínimo (solo a <code>duracion</code> y <code>minimo</code>, con la función <code>jitter()</code> de R, cuya amplitud es proporcional al menor salto entre valores distintos; para la duración entera es de ±0,4 días). Ese ruido tiene su propia semilla (<code>s.series.perturbadas + 1</code>), de modo que no depende de cuántas series perturbadas se generen, y no se agrega antes de generarlas. Las series perturbadas se ajustan también (paso 7) con la mejor distribución de cada variable, pero esos parámetros no intervienen en la cópula final, que usa las marginales de la serie observada.</p></div>
 
 <!-- ============================================================ -->
 <h2 id="marginales">3. Distribuciones marginales</h2>
@@ -285,7 +286,7 @@ $$ \lambda_U = \lim_{q\to 1^-} P(V > q \mid U > q), \qquad \lambda_L = \lim_{q\t
   <td>Distancia de Cramér–von Mises entre la cópula empírica y la ajustada: \(S_n = \sum_{i=1}^n\left[C_n(u_i, v_i) - C_{\hat\theta}(u_i, v_i)\right]^2\). Su p-valor sale de un bootstrap paramétrico con 1000 réplicas, re-estimando la cópula en cada una (pseudo-verosimilitud, optimizador BFGS). \(H_0\): la familia es correcta.</td>
   <td>Test de hipótesis y primer criterio de orden</td></tr>
 <tr><td><strong>AIC</strong></td><td>\(-2\ell + 2k\), con \(k\) parámetros. Premia el ajuste y penaliza la complejidad. Menor es mejor.</td><td>Orden</td></tr>
-<tr><td><strong>BIC</strong></td><td>\(-2\ell + k \ln m\) (ver nota sobre \(m\))</td><td>Desempate</td></tr>
+<tr><td><strong>BIC</strong></td><td>\(-2\ell + k \ln n\), con \(n\) la cantidad de eventos</td><td>Desempate</td></tr>
 <tr><td><strong>MRE</strong> y <strong>RMSE</strong></td><td>Se simulan 1000 puntos de la cópula ajustada, y se compara su cópula empírica con la teórica evaluadas en puntos al azar: error relativo medio (%) y raíz del error cuadrático medio (%).</td><td>Desempate</td></tr>
 <tr><td><strong>Validación cruzada</strong></td><td>Criterio de verosimilitud por validación cruzada de <code>copula::xvCopula</code>. Menor es mejor.</td><td>Desempate</td></tr>
 </table>
@@ -307,7 +308,7 @@ $$ T = \frac{1}{\lambda P} = \frac{N}{n\,P}. $$
 <p>Para el caso conjunto (<em>co-occurrence</em>, o «y»), \(P\) es la probabilidad de que un evento supere a la vez \(x\) en la primera variable e \(y\) en la segunda. Con las marginales \(F_X, F_Y\) y la cópula \(C\):</p>
 $$ P(X \ge x,\, Y \ge y) = 1 - F_X(x) - F_Y(y) + C\big(F_X(x),\, F_Y(y)\big), $$
 $$ T(x,y) = \frac{N}{n\,\big[1 - F_X(x) - F_Y(y) + C(F_X(x), F_Y(y))\big]}. $$
-<p>Es el análogo de la Figura 7 de Chen et al. (2024). El pipeline evalúa \(T\) en una grilla de 100 × 100 puntos (<code>resolucion_grilla</code>) que va del mínimo observado hasta el máximo más un 40 % del rango (<code>margen_grilla</code>), y dibuja las isolíneas de 2, 5, 10, 20, 50, 100, 200 y 500 años sobre los eventos observados.</p>
+<p>Es el análogo de la Figura 7 de Chen et al. (2024; ver <a href="#refs">referencias</a>). El pipeline evalúa \(T\) en una grilla de 100 × 100 puntos (<code>resolucion_grilla</code>) que va del mínimo observado hasta el máximo más un 40 % del rango (<code>margen_grilla</code>), y dibuja las isolíneas de 2, 5, 10, 20, 50, 100, 200 y 500 años sobre los eventos observados.</p>
 <figure>
   <img src="assets/img/periodo_retorno_esquema.svg" alt="Esquema del período de retorno combinado">
   <figcaption>Figura 8. La región de interés es la esquina superior derecha: eventos que superan los dos umbrales a la vez.</figcaption>
@@ -355,8 +356,8 @@ $$ T(x,y) = \frac{N}{n\,\big[1 - F_X(x) - F_Y(y) + C(F_X(x), F_Y(y))\big]}. $$
 <p>La vía duración–magnitud aporta cópulas en estaciones donde el par intensidad–duración no pasó los filtros: para las olas de calor suma 43 estaciones (de 15 a 58 de 69) y para las de frío 40 (de 7 a 47 de 59).</p>
 
 <!-- ============================================================ -->
-<h2 id="limites">10. Limitaciones y observaciones</h2>
-<p>Esta sección reúne los supuestos del método y las observaciones que surgieron al revisar el código. Las dos primeras son propias de la metodología; el resto son detalles de implementación que conviene conocer antes de validar o extender el pipeline.</p>
+<h2 id="limites">10. Limitaciones y correcciones</h2>
+<p>Esta sección reúne los supuestos del método, que son propios de la metodología, y los detalles de implementación que se encontraron y corrigieron al revisar el código.</p>
 
 <h3>Supuestos del método</h3>
 <ul>
@@ -370,33 +371,48 @@ $$ T(x,y) = \frac{N}{n\,\big[1 - F_X(x) - F_Y(y) + C(F_X(x), F_Y(y))\big]}. $$
   <figcaption>Figura 13. La Quiaca: conteo anual de olas de calor y tasa supuesta.</figcaption>
 </figure>
 
-<h3>Observaciones de implementación</h3>
+<h3 id="correcciones">Correcciones de implementación (octubre de 2026)</h3>
+<p>Al revisar el código para escribir este manual se encontraron seis detalles de implementación. Se corrigieron, cada uno en su propio cambio y con un test automático.</p>
 <table>
-<tr><th>#</th><th>Dónde</th><th>Observación</th></tr>
-<tr><td>1</td><td><code>funciones_bondad_ajuste_copulas.R</code>, <code>TestBIC</code></td>
-  <td>La penalización del BIC usa <code>log(ncol(matriz.eventos))</code>, es decir \(\ln 2\) (cantidad de columnas), en lugar de \(\ln n\) (cantidad de eventos). El valor reportado no es el BIC estándar. No altera la elección de familia mientras decida el AIC, porque el BIC solo desempata.</td></tr>
-<tr><td>2</td><td><code>funciones_auxiliares.R</code>, <code>AgregarRuido</code></td>
-  <td>El ruido es <code>v * runif(n, 0, v)</code>, de rango \([0, v^2]\), no \([0, v]\). Para la duración (\(v = 1\)) es \([0,1]\), y para las otras variables (\(v = 0{,}1\)) es \([0, 0{,}01]\), diez veces menor que el valor mínimo de detección. Para romper empates en la duración alcanza. Conviene confirmar si se pretendía \(U(0, v)\) también para las demás.</td></tr>
-<tr><td>3</td><td><code>funciones_mejor_ajuste_copula.R</code>, <code>DeterminarMejorCopula</code></td>
-  <td>Las comparaciones de desempate usan <code>mejor.copula$ccc</code> (inexistente en esa lista) donde corresponde BIC. Como los desempates se evalúan solo cuando el AIC es exactamente igual, no tiene efecto práctico. Además esa función no es la que usa el pipeline: el paso 11 aplica <code>MejorAjusteMultivariadoUC</code> (<code>funciones_worker.R</code>).</td></tr>
-<tr><td>4</td><td>Aleatoriedad</td>
-  <td>Fuera de las semillas fijadas explícitamente (series perturbadas, test de cópula empírica y simulación vía magnitud), los procesos paralelos no fijan semilla. Con <code>pobs(ties.method = "random")</code>, <code>gofCopula</code> (bootstrap) y <code>xvCopula</code>, dos corridas sobre los mismos datos pueden diferir levemente en las medidas de bondad de ajuste, y en casos de AIC muy cercanos, en la familia elegida.</td></tr>
-<tr><td>5</td><td><code>funciones_ajuste_familias_copulas.R</code></td>
-  <td>La familia t fija \(\nu = 4\). En el objeto final se reconstruye con el valor por defecto del paquete (que también es 4), de modo que coincide, pero la coincidencia es implícita.</td></tr>
-<tr><td>6</td><td>Paso 4 de <code>01_copulas.R</code></td>
-  <td>El jitter de la serie usada para el ajuste univariado usa números aleatorios cuya semilla es la misma que la de las series perturbadas (se fija antes). Cambiar <code>n.series.perturbadas</code> cambia el estado del generador y, por lo tanto, el jitter que se aplica a la serie univariada.</td></tr>
+<tr><th>#</th><th>Dónde</th><th>Qué había</th><th>Qué se hizo</th><th>Efecto sobre los resultados</th></tr>
+<tr><td>1</td><td><code>TestBIC</code></td>
+  <td>Penalizaba con <code>log(ncol(matriz.eventos))</code> = \(\ln 2\) (cantidad de variables) en lugar de \(\ln n\).</td>
+  <td>Ahora usa <code>log(nrow(...))</code>, la cantidad de eventos.</td>
+  <td>Cambia el valor reportado del BIC. No cambia la familia elegida mientras decida el AIC, porque el BIC solo desempata.</td></tr>
+<tr><td>2</td><td><code>AgregarRuido</code></td>
+  <td>El ruido era <code>v * runif(n, 0, v)</code>, de rango \([0, v^2]\): con \(v = 0{,}1\) era diez veces menor que el valor mínimo de detección.</td>
+  <td>Ahora es <code>runif(n, 0, v)</code>, como dice el comentario de la función.</td>
+  <td>La duración (\(v = 1\)) no cambia. En intensidad, magnitud y mínimo las series perturbadas tienen más ruido (hasta 0,1). La serie observada no cambia, así que el filtro principal tampoco. Cambia levemente el parámetro final de la cópula (mediana entre series) y los tests sobre las perturbadas.</td></tr>
+<tr><td>3</td><td><code>DeterminarMejorCopula</code></td>
+  <td>Los desempates comparaban el BIC con <code>mejor.copula$ccc</code>, un campo que no existe.</td>
+  <td>Compara con <code>mejor.copula$bic</code>.</td>
+  <td>Ninguno: la función no la usa el pipeline (el paso 11 usa <code>MejorAjusteMultivariadoUC</code>).</td></tr>
+<tr><td>4</td><td>Procesos paralelos</td>
+  <td>Los pasos con simulación (tests de estacionariedad, bondad de ajuste de marginales y de cópulas) no fijaban semilla: el resultado dependía del proceso y del orden de las tareas.</td>
+  <td>Nueva función <code>FijarSemillaTarea</code>: cada tarea fija una semilla derivada de <code>s.series.perturbadas</code> y de su clave (ubicación, variable, serie, familia). Se aplica en los pasos 5, 8 y 10.</td>
+  <td>Dos corridas con los mismos datos y parámetros dan los mismos resultados. Los valores concretos de los tests simulados cambian respecto de corridas anteriores.</td></tr>
+<tr><td>5</td><td>Paso 4 de <code>01_copulas.R</code></td>
+  <td>El jitter de la serie del ajuste univariado dependía de cuántas series perturbadas se generaban antes.</td>
+  <td>Semilla propia, <code>s.series.perturbadas + 1</code>, justo antes del jitter.</td>
+  <td>El jitter ya no cambia al variar <code>n.series.perturbadas</code>.</td></tr>
+<tr><td>6</td><td>Familia t</td>
+  <td>Los grados de libertad (4) están fijos al ajustar y se reconstruyen en el objeto final con el valor por defecto del paquete. Coinciden, pero de manera implícita.</td>
+  <td>Se documenta (<a href="#familias">sección 6.2</a>). No se modificó.</td>
+  <td>Ninguno.</td></tr>
 </table>
-<div class="ojo"><p>Ninguna de estas observaciones se corrigió: el pipeline se mantiene tal como estaba en las corridas ya publicadas. Si se corrige alguna, hay que volver a correr y documentar la diferencia de resultados.</p></div>
+<div class="ojo"><p><strong>Corridas anteriores.</strong> Los resultados de la corrida <code>Olas_20</code> y las cifras de la presentación se calcularon <em>antes</em> de las correcciones 2 y 4 y por eso no se pueden reproducir exactamente con el código actual. Las conclusiones cualitativas no dependen de estos detalles (la serie observada, que decide los filtros, no cambia), pero para citar números hay que volver a correr o aclarar con qué versión se calcularon. Con <code>reusar.resultados: true</code> se reutilizan los ajustes guardados, así que las correcciones solo se ven al recalcular.</p></div>
 
 <!-- ============================================================ -->
 <h2 id="repro">11. Reproducibilidad</h2>
 <ul>
-  <li>Las series perturbadas se generan con <code>s.series.perturbadas</code>, y la semilla se guarda en <code>partial/semilla_utilizada_&lt;id&gt;.rds</code>.</li>
+  <li><strong>Semilla de la corrida.</strong> <code>s.series.perturbadas</code> (123 por defecto) fija las series perturbadas y, a partir de ella, la semilla de cada tarea paralela (<code>FijarSemillaTarea</code>: semilla de la corrida combinada con la ubicación, variable, serie y familia). Como la semilla depende de la tarea y no del proceso, el resultado no cambia con <code>max.procesos</code> ni con el orden en que se reparten las tareas.</li>
+  <li>El jitter de la serie del ajuste univariado usa <code>s.series.perturbadas + 1</code>.</li>
   <li>El test de cópula empírica usa la semilla 20261022 y restaura el estado del generador al terminar.</li>
   <li>El período de retorno vía duración–magnitud usa la semilla 20261023, con restauración del estado.</li>
-  <li>Se guardan los eventos completos (observados y perturbados) en <code>partial/eventos_completos_&lt;id&gt;.rds</code>, y los intermedios en <code>data/partial/</code>.</li>
-  <li><code>reusar.resultados: true</code> recarga los ajustes de una corrida anterior y los reevalúa con los filtros vigentes, para no repetir el trabajo cuando solo cambian los filtros. Es válido únicamente si los filtros nuevos son al menos tan estrictos como los de la corrida anterior.</li>
-  <li>Hay pruebas automáticas (<code>tests/testthat</code>) de los criterios de estacionariedad, dependencia, filtros de ajuste, corrección de continuidad y período de retorno vía magnitud.</li>
+  <li>La semilla de la corrida se guarda en <code>partial/semilla_utilizada_&lt;id&gt;.rds</code>. Los eventos completos (observados y perturbados) quedan en <code>partial/eventos_completos_&lt;id&gt;.rds</code>, y los demás intermedios en <code>data/partial/</code>.</li>
+  <li><code>reusar.resultados: true</code> recarga los ajustes de una corrida anterior y los reevalúa con los filtros vigentes, para no repetir el trabajo cuando solo cambian los filtros. Es válido únicamente si los filtros nuevos son al menos tan estrictos como los de la corrida anterior, y solo si esa corrida se hizo con la misma versión del código (ver las <a href="#correcciones">correcciones</a>).</li>
+  <li>Hay pruebas automáticas (<code>tests/testthat</code>) de los criterios de estacionariedad y dependencia, los filtros de ajuste, la corrección de continuidad, el período de retorno vía magnitud, el BIC, el ruido, el desempate de familias y las semillas por tarea.</li>
+  <li>Para las figuras de la presentación, el script <code>scripts/presentacion/estacionariedad_todos_tests.R</code> calcula los cinco p-valores de estacionariedad en todas las series con las mismas funciones y semillas que el pipeline. Hace falta porque el pipeline corta al primer test que rechaza y no guarda los demás.</li>
 </ul>
 
 <!-- ============================================================ -->
@@ -437,7 +453,7 @@ $$ T(x,y) = \frac{N}{n\,\big[1 - F_X(x) - F_Y(y) + C(F_X(x), F_Y(y))\big]}. $$
   <li>Mann, H. B. (1945). Nonparametric tests against trend. <em>Econometrica</em>, 13(3), 245–259. Kendall, M. G. (1975). <em>Rank Correlation Methods</em>. Griffin.</li>
   <li>Ljung, G. M. y Box, G. E. P. (1978). On a measure of lack of fit in time series models. <em>Biometrika</em>, 65(2), 297–303.</li>
   <li>Kojadinovic, I. (2017). npcp: An R package for nonparametric tests for change-point detection in possibly multivariate observations. <em>Journal of Statistical Software</em>, 77(3), 1–31.</li>
-  <li>Chen et al. (2024), artículo citado en el código del pipeline como referencia de las Figuras 5 (ajuste de la marginal) y 7 (período de retorno combinado). La referencia completa está pendiente de incorporar.</li>
+  <li>Chen, S., Zhao, J., Dou, H., Yang, Z., Li, F., Byun, J. y Kim, S. W. (2024). A study on the monitoring of heatwaves and bivariate frequency analysis based on mortality risk assessment in Wuhan, China. <em>Frontiers in Public Health</em>, 12, 1409563. <a href="https://doi.org/10.3389/fpubh.2024.1409563">doi:10.3389/fpubh.2024.1409563</a>. Es la referencia del código para el período de retorno combinado (Figura 7) y el histograma de la distribución ajustada (Figura 5).</li>
 </ul>
 
 <p class="pie">Repositorio: <a href="https://github.com/CRC-SAS/copulas">CRC-SAS/copulas</a>. Las cifras de la sección 9 provienen de la corrida <code>Olas_20</code>.</p>
